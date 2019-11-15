@@ -262,6 +262,8 @@ if __name__ == "__main__":
         # train
         for node in nodes:
             node.fit_model(epochs=1)
+            print("train :\tnode: %5s" % (node.id), end="\r")
+        print(" " * 73, end="\r")
 
         # test
         losses = list()
@@ -271,9 +273,13 @@ if __name__ == "__main__":
             # print("test  :\t", node.id, loss, metrics)
             losses.append(loss)
             accuracies.append(metrics[0])
-        print("own:\tmax_loss: {%7.4f}\tmin_loss: {%7.4f}\tavg_loss: {%7.4f}" % (
+            print("own:\tnode: %5s\tloss: %7.4f\tacc : %7.4f," % (
+                node.id, loss, metrics[0]), end="\r")
+
+        print(" " * 73, end="\r")
+        print("own:\tmax_loss: %7.4f\tmin_loss: %7.4f\tavg_loss: %7.4f" % (
             max(losses), min(losses), sum(losses) / len(losses)))
-        print("own:\tmax_acc : {%7.4f}\tmin_acc : {%7.4f}\tavg_acc : {%7.4f}" % (
+        print("own:\tmax_acc : %7.4f\tmin_acc : %7.4f\tavg_acc : %7.4f" % (
             max(accuracies), min(accuracies), sum(accuracies) / len(accuracies)))
 
         # TODO: comparison
@@ -286,8 +292,9 @@ if __name__ == "__main__":
                 if peer.id == node.id:
                     continue
                 peer_weights[peer.id] = peer.get_model_weights()
-
             node.update_model_weights(node, peer_weights)
+            print("update:\tnode: %5s" % (node.id), end="\r")
+        print(" " * 73, end="\r")
 
         # test
         losses = list()
@@ -297,12 +304,17 @@ if __name__ == "__main__":
             # print("update:\t", node.id, loss, metrics)
             losses.append(loss)
             accuracies.append(metrics[0])
-        print("mix:\tmax_loss: {%7.4f}\tmin_loss: {%7.4f}\tavg_loss: {%7.4f}" % (
+            print("mix:\tnode: %5s\tloss: %7.4f\tacc : %7.4f," % (
+                node.id, loss, metrics[0]), end="\r")
+
+        print(" " * 73, end="\r")
+        print("mix:\tmax_loss: %7.4f\tmin_loss: %7.4f\tavg_loss: %7.4f" % (
             max(losses), min(losses), sum(losses) / len(losses)))
-        print("mix:\tmax_acc : {%7.4f}\tmin_acc : {%7.4f}\tavg_acc : {%7.4f}" % (
+        print("mix:\tmax_acc : %7.4f\tmin_acc : %7.4f\tavg_acc : %7.4f" % (
             max(accuracies), min(accuracies), sum(accuracies) / len(accuracies)))
 
         end_time = time.time()
         elapsed_time = end_time - start_time
         elapsed_times.append(elapsed_time)
-        print("elapsed time: {%f}\tETA: {%f}" % (elapsed_time, avg_time(elapsed_times)))
+        print("elapsed time: %f\tETA: %f" %
+              (elapsed_time, avg_time(elapsed_times)))
