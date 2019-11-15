@@ -1,6 +1,9 @@
-# PPDL-blockchain
-Privacy Preserving Deep Learning based on Blockchain
+# DDL-simulator
+Distributed Deep Learning Simulator
+
+Keywords:
+* Federated Learning
+* Privacy Preserving Deep Learning
 
 # TODO
-- [ ] P2P communication
-- [ ] DAG & Asynchronous
+- [ ] DDL-blockchain
