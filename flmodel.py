@@ -4,8 +4,7 @@ import tensorflow as tf
 class Flmodel:
     def __init__(self, compiled_model):
         self.model = compiled_model
-        self.__loss = None
-        self.__metrics = None
+        self.__metrics = None  # loss, acc, et al.
 
     def fit(self, x_train, y_train, epochs=1, callbacks=[], verbose=0):
         self.model.fit(
@@ -13,20 +12,11 @@ class Flmodel:
             epochs=epochs, callbacks=callbacks, verbose=verbose)
 
     def evaluate(self, x_test, y_test, verbose=0):
-        res = self.model.evaluate(x_test, y_test, verbose=verbose)
-        self.__loss = res[0]
-        self.__metrics = res[1:]
-        return self.get_loss(), self.get_metrics()
-
-    def get_loss(self):
-        return self.__loss
+        self.__metrics = self.model.evaluate(x_test, y_test, verbose=verbose)
+        return self.get_metrics()
 
     def get_metrics(self):
         return self.__metrics
-
-    # def evaluate_without_saving(self, x_test, y_test, verbose=0):
-    #     res = self.model.evaluate(x_test, y_test, verbose=verbose)
-    #     return res[0], res[1:]  # __loss, __metrics
 
     def get_weights(self):
         return self.model.get_weights()

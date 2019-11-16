@@ -13,6 +13,7 @@ def sha3_256(inputs=[]):
         SHA3.update(i)
     return SHA3.hexdigest()
 
+
 # Input remains into last elem.
 def split_dataset(dataset, num):
     unit = int(len(dataset) / num)
@@ -47,3 +48,6 @@ if __name__ == "__main__":
     a = list(range(111))
     b = split_dataset(a, 12)
     pprint(b)
+
+    hash_output = sha3_256([b'1', b'2', b'3'])
+    print(hash_output, type(hash_output))

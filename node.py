@@ -7,7 +7,7 @@ class Node:
     def __init__(
             self,
             id: str,  # unique ID (Address)
-            flmodel=None,  # NN model
+            flmodel: Flmodel = None,  # NN model
             x_train=None, y_train=None,
             x_test=None, y_test=None,
             reputation: dict = dict(),
@@ -100,9 +100,6 @@ class Node:
     def evaluate_model(self, verbose=0):
         return self.__flmodel.evaluate(
             self.__x_test, self.__y_test, verbose=verbose)
-
-    def get_model_loss(self):
-        return self.__flmodel.get_loss()
 
     def get_model_metrics(self):
         return self.__flmodel.get_metrics()
@@ -269,12 +266,12 @@ if __name__ == "__main__":
         losses = list()
         accuracies = list()
         for node in nodes:
-            loss, metrics = node.evaluate_model()
+            metrics = node.evaluate_model()
             # print("test  :\t", node.id, loss, metrics)
-            losses.append(loss)
-            accuracies.append(metrics[0])
+            losses.append(metrics[0])
+            accuracies.append(metrics[1])
             print("own:\tnode: %5s\tloss: %7.4f\tacc : %7.4f," % (
-                node.id, loss, metrics[0]), end="\r")
+                node.id, metrics[0], metrics[1]), end="\r")
 
         print(" " * 73, end="\r")
         print("own:\tmax_loss: %7.4f\tmin_loss: %7.4f\tavg_loss: %7.4f" % (
@@ -292,6 +289,8 @@ if __name__ == "__main__":
                 if peer.id == node.id:
                     continue
                 peer_weights[peer.id] = peer.get_model_weights()
+
+            # TODO: duplicated weight update problem on the earliest nodes.
             node.update_model_weights(node, peer_weights)
             print("update:\tnode: %5s" % (node.id), end="\r")
         print(" " * 73, end="\r")
@@ -300,12 +299,12 @@ if __name__ == "__main__":
         losses = list()
         accuracies = list()
         for node in nodes:
-            loss, metrics = node.evaluate_model()
+            metrics = node.evaluate_model()
             # print("update:\t", node.id, loss, metrics)
-            losses.append(loss)
-            accuracies.append(metrics[0])
+            losses.append(metrics[0])
+            accuracies.append(metrics[1])
             print("mix:\tnode: %5s\tloss: %7.4f\tacc : %7.4f," % (
-                node.id, loss, metrics[0]), end="\r")
+                node.id, metrics[0], metrics[1]), end="\r")
 
         print(" " * 73, end="\r")
         print("mix:\tmax_loss: %7.4f\tmin_loss: %7.4f\tavg_loss: %7.4f" % (
