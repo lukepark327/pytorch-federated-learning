@@ -134,7 +134,8 @@ class Node:
         return self.__policy_replace_model.name
 
     def set_policy_update_reputation(
-            self, policy_update_reputation_name,
+            self,
+            policy_update_reputation_name,
             policy_update_reputation_func):
         self.__policy_update_reputation = MetaFunc(
             policy_update_reputation_name,
@@ -142,7 +143,8 @@ class Node:
         )
 
     def set_policy_update_model_weights(
-            self, policy_update_model_weights_name,
+            self,
+            policy_update_model_weights_name,
             policy_update_model_weights_func):
         self.__policy_update_model_weights = MetaFunc(
             policy_update_model_weights_name,
@@ -150,7 +152,8 @@ class Node:
         )
 
     def set_policy_replace_model(
-            self, policy_replace_model_name,
+            self,
+            policy_replace_model_name,
             policy_replace_model_func):
         self.__policy_replace_model = MetaFunc(
             policy_replace_model_name,
