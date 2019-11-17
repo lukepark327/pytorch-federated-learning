@@ -1,5 +1,5 @@
 # DDL-simulator
-Distributed Deep Learning Simulator
+Decentralized Deep Learning Simulator
 
 Keywords:
 * Federated Learning
