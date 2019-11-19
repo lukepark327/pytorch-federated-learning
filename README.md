@@ -42,3 +42,7 @@ The `main.py` does simple DDL simulation with several policies:
 
 * Repeat **rounds** sufficiently.
   * Each node trains, tests, updates (its weights), and send transaction(s) per round.
+
+# License
+
+The DDL-simulator project is licensed under the MIT License, also included in our repository in the [LICENSE](https://github.com/lukepark327/DDL-simulator/blob/master/LICENSE) file.
