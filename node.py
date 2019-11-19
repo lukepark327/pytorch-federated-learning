@@ -163,7 +163,6 @@ class Node:
 
 if __name__ == "__main__":
     import tensorflow as tf
-    from utils import split_dataset
     import numpy as np
     import arguments
     import time
