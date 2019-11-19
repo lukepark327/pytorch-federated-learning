@@ -234,10 +234,10 @@ if __name__ == "__main__":
     x_train, x_test = x_train / 255.0, x_test / 255.0
 
     # split dataset
-    my_x_train = split_dataset(x_train, num_nodes)
-    my_y_train = split_dataset(y_train, num_nodes)
-    my_x_test = split_dataset(x_test, num_nodes)
-    my_y_test = split_dataset(y_test, num_nodes)
+    my_x_train = np.array_split(x_train, num_nodes)
+    my_y_train = np.array_split(y_train, num_nodes)
+    my_x_test = np.array_split(x_test, num_nodes)
+    my_y_test = np.array_split(y_test, num_nodes)
 
     # set nodes
     ids = [str(i) for i in range(num_nodes)]

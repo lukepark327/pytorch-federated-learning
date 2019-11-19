@@ -148,7 +148,6 @@ if __name__ == "__main__":
         genesis_transaction,
         policy_update_txs_weight_name="heaviest",
         policy_update_txs_weight_func=my_policy_update_txs_weight)
-
     blockchain.print()
 
     tx_1 = Transaction("1", ["0"], [0.8])
