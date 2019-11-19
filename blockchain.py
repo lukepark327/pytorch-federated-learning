@@ -117,6 +117,8 @@ class Blockchain:
 
     def add_transaction(self, tx: Transaction, *args):
         """invalid tx cases"""
+        # TODO: Tx requires at least one refer. except the genesis one.
+
         # already exist
         if tx.id in self.transactions:
             raise ValueError
