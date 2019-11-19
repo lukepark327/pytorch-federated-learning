@@ -8,3 +8,4 @@ Keywords:
 # TODO
 - [ ] DDL-blockchain
 - [ ] Packaging .py files
+- [ ] easy installation about dependencies
