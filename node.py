@@ -1,6 +1,5 @@
 from flmodel import Flmodel
-from utils import MetaFunc
-from utils import sha3_256
+from utils import MetaFunc, cal_weights_hash
 
 
 class Node:
@@ -36,13 +35,6 @@ class Node:
         )
 
     def print(self):
-        def cal_weights_hash(weights: list):
-            weights_list = list()
-            for weight in weights:
-                b = weight.tobytes()
-                weights_list.append(b)
-            return sha3_256(weights_list)
-
         print("")
         print("id        :\t", self.id)
         print("weight    :\t", cal_weights_hash(self.get_model_weights()))
