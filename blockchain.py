@@ -2,7 +2,8 @@
 # blockchain-like shared database for simulation.
 # Not real blockchain structures and functions.
 from flmodel import Flmodel
-from utils import MetaFunc, cal_weights_hash
+from utils import MetaFunc, cal_weights_hash, sha3_256
+import numpy as np
 
 
 class Reference:
@@ -14,29 +15,34 @@ class Reference:
 class Transaction:
     def __init__(
             self,
-            id: str,
             owner: str,
             timestamp: int,
             prev_transactions: list = list(),
             prev_transactions_metrics: list = list(),
             flmodel: Flmodel = None,
             weight: int = 1):
-        self.id = id
         self.owner = owner
         self.timestamp = timestamp
         self.flmodel = flmodel
         self.weight = weight  # weight using DAG's tx
         self.references = self.__set_references(
             prev_transactions, prev_transactions_metrics)
+        self.id = self.__set_id()
 
     def print(self):
         print("")
         print("id        :\t", self.id)
         print("owner     :\t", self.owner)
         print("timestamp :\t", self.timestamp)
-        print("flmodel   :\t", cal_weights_hash(self.flmodel.get_model_weights()) if self.flmodel is not None else "None")
+        print("flmodel   :\t", cal_weights_hash(
+            self.flmodel.get_model_weights()) if self.flmodel is not None else "None")
         print("weight    :\t", self.weight)
         print("references:\t", self.get_references_ids())
+
+    def __set_id(self):
+        b = np.array([self.owner, self.timestamp, self.flmodel,
+                      self.weight, self.references]).tobytes()
+        return sha3_256([b])
 
     def __set_references(self, prev_transactions: list, prev_transactions_metrics: list):
         if len(prev_transactions) != len(prev_transactions_metrics):
@@ -176,7 +182,7 @@ if __name__ == "__main__":
             p_tx = self.get_transaction_by_id(p_id)
             p_tx.weight += amount
 
-    genesis_transaction = Transaction("0", "Alice", int(time()))
+    genesis_transaction = Transaction("Alice", int(time()))
     blockchain = Blockchain(
         genesis_transaction,
         policy_update_txs_weight_name="heaviest",
@@ -185,21 +191,37 @@ if __name__ == "__main__":
 
     sleep(1.5)
 
-    tx_1 = Transaction("1", "Bob", int(time()), ["0"], [0.8])
+    tx_1 = Transaction(
+        "Bob",
+        int(time()),
+        [
+            blockchain.get_latest_transaction_by_owner("Alice").id],
+        [0.8])
     blockchain.add_transaction(tx_1)
     blockchain.print()
     [p.print() for p in blockchain.get_all_transactions_by_owner("Bob")]
 
     sleep(1.5)
 
-    tx_2 = Transaction("2", "Bob", int(time()), ["0", "1"], [0.9, 0.7])
+    tx_2 = Transaction(
+        "Bob",
+        int(time()),
+        [
+            blockchain.get_latest_transaction_by_owner("Alice").id,
+            blockchain.get_latest_transaction_by_owner("Bob").id],
+        [0.9, 0.7])
     blockchain.add_transaction(tx_2)
     blockchain.print()
     [p.print() for p in blockchain.get_all_transactions_by_owner("Bob")]
 
     sleep(1.5)
 
-    tx_3 = Transaction("3", "Eve", int(time()), ["2"], [0.3])
+    tx_3 = Transaction(
+        "Eve",
+        int(time()),
+        [
+            blockchain.get_latest_transaction_by_owner("Bob").id],
+        [0.3])
     blockchain.add_transaction(tx_3)
     blockchain.print()
     blockchain.get_latest_transaction_by_owner("Bob").print()
