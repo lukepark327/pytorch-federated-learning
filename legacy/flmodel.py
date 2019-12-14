@@ -51,7 +51,9 @@ if __name__ == "__main__":
     # print(weights)
 
     # Train
-    flmodel.fit(x_train, y_train, epochs=5, verbose=2)
+    flmodel.fit(x_train, y_train, epochs=1, verbose=2)
 
     # Eval.
-    print("Eval: ", flmodel.evaluate(x_test, y_test, verbose=2))
+    eval_ = flmodel.evaluate(x_test, y_test, verbose=2)
+    print(eval_)
+    print(eval_[0])

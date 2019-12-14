@@ -23,16 +23,20 @@ class TxTypeEnum(Enum):
 
 
 class Transaction:
-    def __init__(self, tx_type, owner, timestamp, refs):
+    def __init__(self, tx_type, task_id, owner, timestamp, refs):
         self.type = tx_type
+        self.task_id = task_id
         self.owner = owner
         self.timestamp = timestamp
         self.refs = refs
-    
+
+    # TODO: Make txid to have model id in inputs.
     @property
     def txid(self):
         return sha3_256_from_array(inputs=[
-            self.owner, 
+            self.type,
+            self.task_id,
+            self.owner,
             self.timestamp, 
             self.refs,
         ])

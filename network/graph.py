@@ -1,13 +1,13 @@
 from copy import deepcopy
 
-from transaction import Transaction, TxTypeEnum
+from .transaction import Transaction, TxTypeEnum
 from ml.flmodel import FLModel
 
 class TxGraph:
     """
     TxGraph represents the DAG(Directed Acyclic Graph) structure consists of Transaction instances
     """
-    def __init__(self, genesis_tx=None, eval_set):
+    def __init__(self, genesis_tx=None, eval_set=tuple()):
         if genesis_tx is not None:
             self.genesis_tx = genesis_tx
         else:
@@ -32,6 +32,9 @@ class TxGraph:
         genesis = Transaction(TxTypeEnum.NONE, '', 0, [])
         self.genesis_tx = genesis
     
+    def has_transaction(self, tx):
+        return tx.txid in self.transactions
+
     def add_transaction(self, tx):
         self.transactions[tx.txid] = tx
     
@@ -39,10 +42,13 @@ class TxGraph:
         self.missing_transactions.union(txid)
 
     def evaluate_and_record_model(self, model_id: str, model: FLModel):
-        m = deepcopy(model)
-        m.evaluate(self.x_eval, self.y_eval)
-        self.model_evaluated_results[model_id] = m.evalutation
-    
+        if model_id in self.model_evaluated_results:
+            return
+        self.model_evaluated_results[model_id] = m.evaluate(self.x_eval, self.y_eval)
+
+    def get_evaluation_result(self, model_id):
+        return self.model_evaluated_results[model_id]
+
     def get_transaction_by_id(self, txid):
         if txid in self.transactions:
             return self.transactions[txid]
@@ -64,6 +70,7 @@ class TxGraph:
             self.add_missing_transaction(txid)
         return predecessors
 
+    # TODO: do not use timestamp, make this function use tip selection algorithm
     def get_latest_transaction_by_owner(self, owner: str):
         txs = self.get_all_transactions_by_owner(owner)
         times = [tx.timestamp for tx in txs]

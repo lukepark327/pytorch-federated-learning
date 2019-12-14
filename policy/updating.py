@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import List
-from copy import deepcopy
+from copy import copy
 import numpy as np
 
 from ml.flmodel import FLModel
@@ -12,7 +12,7 @@ class UpdatingTypeEnum(Enum):
 
 
 class Updating:
-    def __init__(self, updating_type, weights, x_train=None, y_train=None):
+    def __init__(self, updating_type, weights=None, x_train=None, y_train=None):
         self.type = updating_type
         self.weights = weights
         self.x_train = x_train
@@ -27,7 +27,7 @@ class Updating:
             for m in models:
                 w.append(m.weights)
             w = np.array(w)
-            model = deepcopy(models[0])
+            model = copy(models[0])
             model.weights = np.average(w, axis=0)
             return model
 
@@ -36,12 +36,12 @@ class Updating:
             for m in models:
                 w.append(m.weights)
             w = np.array(w)
-            model = deepcopy(models[0])
+            model = copy(models[0])
             model.weights = np.average(w, axis=0, weights=self.weights)
             return model
 
         elif self.type is UpdatingTypeEnum.CONTINUAL:
-            referencing_model = deepcopy(models[0])
+            referencing_model = copy(models[0])
             referencing_model.fit(self.x_train, self.y_train)
             return referencing_model
 
