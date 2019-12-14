@@ -9,12 +9,12 @@ class Comparison:
     def satisfied(self, prev, new):
         if self.metric is Metric.LOSS:
             prev, new = prev[0], new[0]
-            if prev <= self.threshold[metric]:
+            if prev <= self.threshold:
                 return prev >= new
             return prev >= new + self.threshold
         elif self.metric is Metric.ACC:
             prev, new = prev[1], new[1]
-            if new + self.threshold[metric] > 1.0:
+            if new + self.threshold > 1.0:
                 return prev <= new
             return prev <= new + self.threshold
         else:

@@ -31,37 +31,37 @@ class Selection:
         select returns the list of transactions
         """
         if (self.type is SelectionTypeEnum.HEAVY_REF_TX
-            or self.type is SelectionTypeEnum.HIGH_EVAL_TX):
-            return tx_graph.get_transaction_list_by_ids(
-                self.eval_list[0:self.number]
-            )
+            or self.type is SelectionTypeEnum.HIGH_EVAL_ACC_TX
+            or self.type is SelectionTypeEnum.LOW_EVAL_LOSS_TX):
+            return [ tx_graph.get_transaction_by_id(e[0])\
+                for e in self.eval_list[0:self.number] ]
         # For now, there are only selection rules using tx or owner
         else:
-            return [ tx_graph.get_latest_transaction_by_owner(owner_id) \
-                for owner_id in self.eval_list[0:self.number] ]
+            return [ tx_graph.get_latest_transaction_by_owner(e[0]) \
+                for e in self.eval_list[0:self.number] ]
 
     def update(self, tx_graph: TxGraph):
         if self.type is SelectionTypeEnum.HEAVY_REF_TX:
             self.eval_list = sorted(
-                tx_graph.tx_referenced_table.iteritems(),
+                iter(tx_graph.tx_referenced_table.items()),
                 key=lambda x: x[1],
                 reverse=True
             )
         elif self.type is SelectionTypeEnum.HEAVY_REF_OWNER_LATEST:
             self.eval_list = sorted(
-                tx_graph.owner_referenced_table.iteritems(),
+                iter(tx_graph.owner_referenced_table.items()),
                 key=lambda x: x[1],
                 reverse=True
             )
         elif self.type is SelectionTypeEnum.HIGH_EVAL_ACC_TX:
             self.eval_list = sorted(
-                tx_graph.model_evaluated_results.iteritems(),
+                iter(tx_graph.model_evaluated_results.items()),
                 key=lambda x: x[1][1],
                 reverse=True
             )
         elif self.type is SelectionTypeEnum.LOW_EVAL_LOSS_TX:
             self.eval_list = sorted(
-                tx_graph.model_evaluated_results.iteritems(),
+                iter(tx_graph.model_evaluated_results.items()),
                 key=lambda x: x[1][0],
             )
         else:

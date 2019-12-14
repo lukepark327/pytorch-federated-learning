@@ -1,8 +1,8 @@
 from enum import Enum
 from typing import List
-from copy import copy
 import numpy as np
 
+from ml.task import Task, compile_model
 from ml.flmodel import FLModel
 
 class UpdatingTypeEnum(Enum):
@@ -18,7 +18,7 @@ class Updating:
         self.x_train = x_train
         self.y_train = y_train
 
-    def update(self, models: List["FLModel"]):
+    def update(self, models: List["FLModel"], task: Task):
         if len(models) < 1 :
             raise ValueError
         
@@ -27,7 +27,7 @@ class Updating:
             for m in models:
                 w.append(m.weights)
             w = np.array(w)
-            model = copy(models[0])
+            model = task.create_base_model()
             model.weights = np.average(w, axis=0)
             return model
 
@@ -36,12 +36,13 @@ class Updating:
             for m in models:
                 w.append(m.weights)
             w = np.array(w)
-            model = copy(models[0])
+            model = task.create_base_model()
             model.weights = np.average(w, axis=0, weights=self.weights)
             return model
 
         elif self.type is UpdatingTypeEnum.CONTINUAL:
-            referencing_model = copy(models[0])
+            referencing_model = task.create_base_model()
+            referencing_model.weights = models[0].weights
             referencing_model.fit(self.x_train, self.y_train)
             return referencing_model
 

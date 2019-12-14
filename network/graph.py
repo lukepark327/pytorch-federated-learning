@@ -44,7 +44,7 @@ class TxGraph:
     def evaluate_and_record_model(self, model_id: str, model: FLModel):
         if model_id in self.model_evaluated_results:
             return
-        self.model_evaluated_results[model_id] = m.evaluate(self.x_eval, self.y_eval)
+        self.model_evaluated_results[model_id] = model.evaluate(self.x_eval, self.y_eval)
 
     def get_evaluation_result(self, model_id):
         return self.model_evaluated_results[model_id]
@@ -56,7 +56,9 @@ class TxGraph:
             return None
     
     def get_transaction_list_by_ids(self, txids):
-        return [ self.get_transaction_by_id[txid] for txid in txids if txid is not None ]
+        print(txids)
+        
+        return [ self.get_transaction_by_id(txid) for txid in txids if txid is not None ]
 
     def get_all_predecessors_by_id(self, txid):
         tx = self.get_transaction_by_id(txid)
