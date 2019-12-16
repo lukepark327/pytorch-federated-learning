@@ -38,16 +38,16 @@ class TxGraph:
         self.genesis_tx = genesis
     
     def has_transaction(self, tx):
-        return tx.txid in self.transactions
+        return tx.txid in self.transactions.keys()
 
     def add_transaction(self, tx):
         self.transactions[tx.txid] = tx
     
     def add_missing_transaction(self, txid):
-        self.missing_transactions.union(txid)
+        self.missing_transactions.add(txid)
 
     def evaluate_and_record_model(self, model: FLModel):
-        if model.model_id in self.model_evaluated_results:
+        if model.model_id in self.model_evaluated_results.keys():
             return
         self.model_evaluated_results[model.model_id] = model.evaluate(self.x_eval, self.y_eval)
 
@@ -55,11 +55,17 @@ class TxGraph:
         return self.model_evaluated_results[model_id]
 
     def get_transaction_by_id(self, txid):
-        if txid in self.transactions:
+        if txid in self.transactions.keys():
             return self.transactions[txid]
         else:
             return None
-    
+
+    def get_transaction_by_model_id(self, model_id):
+        for tx in self.transactions.values():
+            if tx.model_id == model_id:
+                return tx
+        return None
+
     def get_transaction_list_by_ids(self, txids):
         return [ self.get_transaction_by_id(txid) for txid in txids if txid is not None ]
 
@@ -114,7 +120,8 @@ class TxGraph:
 
     def __str__(self):
         return (
-            "number of transactions: " + len(self.transactions.keys()) + \
-            "missing transactions: " + self.missing_transactions
+            "number of transactions: " + str(len(self.transactions.keys())) + \
+            # "missing transactions: " + str(self.missing_transactions) + \
+            "\nmodel evaluated: " + str(self.model_evaluated_results) 
         )
     

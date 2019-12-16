@@ -1,8 +1,9 @@
 from random import random
-from pprint import pprint
+from copy import copy
 
 from .graph import TxGraph
 from .transaction import Transaction, TxTypeEnum, Reference
+# from .byzantine import Byzantine
 from ml.task import Task, compile_model
 from policy.selection import Selection
 from policy.updating import Updating
@@ -47,7 +48,7 @@ class Node:
             return
         self.tx_graph.add_transaction(tx)
         self.will_send_transaction(tx)
-        if random() < self.eval_rate:
+        if random() < self.eval_rate and tx.owner is not self.nid:
             self.tx_graph.evaluate_and_record_model(
                 model=self.model_table[tx.model_id]
             )
@@ -59,7 +60,7 @@ class Node:
         self.__tx_receiving_buffer = list()
     
     def make_new_transaction(self, tx_type, task_id, model_id, refs):
-        tx = Transaction(tx_type, task_id, self.nid, model_id, self.time, refs)
+        tx = Transaction(tx_type, task_id, self.nid, model_id, copy(self.time.value), refs)
         self.tx_graph.add_transaction(tx)
         return tx
 
@@ -110,6 +111,10 @@ class Node:
     def is_byzantine(self):
         return self.byzantine is not None
 
+    @property
+    def byzantine_type(self):
+        return self.byzantine.type
+
     def open_task(self, task: Task):
         tx = self.make_new_transaction(
             tx_type=TxTypeEnum.OPEN, 
@@ -119,21 +124,30 @@ class Node:
         )
         self.upload_model_and_update_current_model(task.task_model)
         self.will_send_transaction(tx)
+        return tx
 
-    def init_local_train(self, task: Task):
+    def init_local_train(self, task: Task, open_tx: Transaction, tx_making_rate: float):
         basic_model = task.create_base_model()
         basic_model.fit(self.__x_train, self.__y_train)
         self.upload_model_and_update_current_model(basic_model)
         self.test_evaluation(basic_model)
+        if random() < tx_making_rate:
+            new_tx = self.make_new_transaction(
+                tx_type=TxTypeEnum.SOLVE,
+                task_id=task.task_id,
+                model_id=basic_model.model_id,
+                refs=[Reference(open_tx.txid, self.test_evaluation(task.task_model))]
+            )
+            self.will_send_transaction(new_tx)
     
+
     def update(self, task: Task):
         selected_txs = self.select_transactions()
-        if len(selected_txs) is 0:
+        if len(selected_txs) is 0 or self.current_model is None:
             return
-        print(selected_txs)
         selected_models = [ self.model_table[tx.model_id] for tx in selected_txs ]
         
-        new_model = self.updating.update(selected_models, task)
+        new_model = self.updating.update(selected_models, task, copy(self.time.value))
         new_eval = self.test_evaluation(new_model)
         prev_eval = self.test_evaluation(self.current_model)
 
@@ -155,6 +169,7 @@ class Node:
             "\nlength of data: " + str(len(self.__x_train)) + \
             "\nadjacent nodes: " + str([ 'node id: ' + n.nid for n in self.adjacent_list ]) + \
             "\ncurrent model id: " + self.model_id + \
-            "\ntransaction info: " + str(self.tx_graph.get_transaction_by_id(self.model_id)) + \
+            "\ncurrent model history: " + str(self.current_model.history) + \
+            "\ntransaction info: " + str(self.tx_graph.get_transaction_by_model_id(self.model_id)) + \
             "\nevaluation rate: " + str(self.eval_rate) + \
-            "\ncurr eval: " + str(self.test_evaluation(self.current_model) )
+            "\ncurr eval: " + str(self.test_evaluation(self.current_model))

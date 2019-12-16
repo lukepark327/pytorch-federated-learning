@@ -17,3 +17,14 @@ class GlobalDict:
         """
         self.__dict__[key] = val
         
+
+class GlobalTime:
+    def __init__(self):
+        self.__value = 0
+    
+    def tick(self):
+        self.__value += 1
+
+    @property
+    def value(self):
+        return self.__value

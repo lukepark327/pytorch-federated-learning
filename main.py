@@ -13,12 +13,13 @@ from ml.task import Task, create_simple_sequential_model
 from ml.flmodel import FLModel
 from data.load import load_data
 from utils.arguments import parser
+from utils.global_dict import GlobalTime
 
 if __name__ == "__main__":
     # Global references
     global_model_dict = dict()
     global_task_dict = dict()
-    global_time = 0
+    global_time = GlobalTime()
 
     # Arguments
     args = parser()
@@ -78,7 +79,8 @@ if __name__ == "__main__":
             eval_set=(x_train[i], y_train[i])
         )
         selection = Selection(
-            selection_type=SelectionTypeEnum.HIGH_EVAL_ACC_TX,
+            selection_type=SelectionTypeEnum.HIGH_EVAL_ACC_MODEL,
+            owner=str(i),
             number_of_selection=1,
         )
         updating = Updating(
@@ -89,7 +91,7 @@ if __name__ == "__main__":
         )
         comparison = Comparison(
             metric=Metric.ACC,
-            threshold=0,
+            threshold=0.05,
         )
         new_node = Node(
             nid=str(i),
@@ -106,7 +108,6 @@ if __name__ == "__main__":
         )
         # Each node has its own local trained result
         # The results are recorded on global_model_dict['local-(node_id)']
-        new_node.init_local_train(simple_task)
         nodes.append(new_node)
 
     # Set adjacent nodes
@@ -118,16 +119,23 @@ if __name__ == "__main__":
         nodes[i].adjacent_list = [ nodes[j] for j in choices if j.item is not i ]
     
     # Tick!
-    global_time += 1
+    global_time.tick()
 
     # Make the first task transaction by node 0
-    nodes[0].open_task(task=simple_task)
+    open_tx = nodes[0].open_task(task=simple_task)
     print(nodes[0])
 
     # Simulate the network
     for i in range(number_of_rounds):
         print("Round: ", i)
         for node in nodes:
+            if nodes[i].model_id is None:
+            if nodes[i].tx_graph.has_transaction(open_tx):
+                nodes[i].init_local_train(
+                    task=simple_task,
+                    open_tx=open_tx,
+                    tx_making_rate=update_rate
+                )
             node.send_txs_in_buffer()
         
         for node in nodes:
@@ -138,15 +146,15 @@ if __name__ == "__main__":
         for node in nodes:
             node.get_transactions_from_buffer()
         
-        global_time += 1
+        global_time.tick()
     
     model_set = set()
     eval_dict = dict()
     
     for node in nodes:
+        print(node)
+        print(global_model_dict[node.model_id].evaluate(global_x_test, global_y_test))
         model_set.add(node.model_id)
-    for mid in model_set:
-        model = global_model_dict[mid]
-        print(model)
-        eval_dict[mid] = global_model_dict[mid].evaluate(global_x_test, global_y_test)
-        print(eval_dict[mid])
+
+    print("model set")
+    print(len(model_set))
