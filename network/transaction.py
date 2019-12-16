@@ -23,27 +23,24 @@ class TxTypeEnum(Enum):
 
 
 class Transaction:
-    def __init__(self, tx_type, task_id, owner, timestamp, refs):
+    def __init__(self, tx_type, task_id, owner, model_id, timestamp, refs):
         self.type = tx_type
         self.task_id = task_id
         self.owner = owner
+        self.model_id = model_id
         self.timestamp = timestamp
         self.refs = refs
 
-    # TODO: Make txid to have model id in inputs.
     @property
     def txid(self):
         return sha3_256_from_array(inputs=[
             self.type,
             self.task_id,
             self.owner,
+            self.model_id,
             self.timestamp, 
             self.refs,
         ])
-
-    @property
-    def model_id(self):
-        return self.txid
         
     @property
     def ref_ids(self):
@@ -51,9 +48,21 @@ class Transaction:
 
     def __str__(self):
         return (
-            "id: " + self.txid + \
+            "Transaction Object: " + \
+            "\nid: " + self.txid + \
             "\ntype: " + self.type.name + \
             "\nowner: " + self.owner + \
+            "\nmodel id: " + self.model_id + \
             "\ntimestamp: " + str(self.timestamp) + \
             "\nreferences: " + str(self.refs)
         )
+
+def generate_genesis_tx():
+    return Transaction(
+        tx_type=TxTypeEnum.NONE,
+        task_id='',
+        owner='',
+        model_id='',
+        timestamp=0,
+        refs=[]
+    )

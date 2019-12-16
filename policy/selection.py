@@ -34,7 +34,8 @@ class Selection:
             or self.type is SelectionTypeEnum.HIGH_EVAL_ACC_TX
             or self.type is SelectionTypeEnum.LOW_EVAL_LOSS_TX):
             return [ tx_graph.get_transaction_by_id(e[0])\
-                for e in self.eval_list[0:self.number] ]
+                for e in self.eval_list[0:self.number] \
+                    if tx_graph.get_transaction_by_id(e[0]) is not None ]
         # For now, there are only selection rules using tx or owner
         else:
             return [ tx_graph.get_latest_transaction_by_owner(e[0]) \

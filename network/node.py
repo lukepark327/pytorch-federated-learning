@@ -1,4 +1,5 @@
 from random import random
+from pprint import pprint
 
 from .graph import TxGraph
 from .transaction import Transaction, TxTypeEnum, Reference
@@ -14,7 +15,8 @@ class Node:
         global_model_table, train_set, test_set, eval_rate,
         tx_graph: TxGraph, 
         selection: Selection, updating: Updating, comparison: Comparison,
-        adjacent_list=list(), model_id=None
+        adjacent_list=list(), byzantine = None, 
+        model_id=None,
         ):
         self.nid = nid
         self.adjacent_list = adjacent_list
@@ -29,6 +31,7 @@ class Node:
         self.selection = selection
         self.updating = updating
         self.comparison = comparison
+        self.byzantine = byzantine
         self.__test_cache = dict()
         self.__tx_sending_buffer = list()
         self.__tx_receiving_buffer = list()
@@ -46,24 +49,20 @@ class Node:
         self.will_send_transaction(tx)
         if random() < self.eval_rate:
             self.tx_graph.evaluate_and_record_model(
-                model_id=tx.model_id,
                 model=self.model_table[tx.model_id]
             )
+            
 
     def get_transactions_from_buffer(self):
         for received_tx in self.__tx_receiving_buffer:
             self.get_transaction(received_tx)
         self.__tx_receiving_buffer = list()
     
-    def make_new_transaction(self, tx_type, task_id, refs):
-        tx = Transaction(tx_type, task_id, self.nid, self.time, refs)
+    def make_new_transaction(self, tx_type, task_id, model_id, refs):
+        tx = Transaction(tx_type, task_id, self.nid, model_id, self.time, refs)
         self.tx_graph.add_transaction(tx)
         return tx
 
-    def send_new_transaction(self, tx):
-        for node in self.adjacent_list:
-            node.will_get_transaction(tx)
-    
     def send_txs_in_buffer(self):
         for tx in self.__tx_sending_buffer:
             for node in self.adjacent_list:
@@ -79,6 +78,10 @@ class Node:
         if self.model_id == None:
             return None
         return self.model_table[self.model_id]
+
+    def upload_model_and_update_current_model(self, model):
+        self.model_table[model.model_id] = model
+        self.model_id = model.model_id
     
     @property
     def data_set(self):
@@ -96,50 +99,55 @@ class Node:
         # Refresh test cache
         self.__test_cache = dict()
 
-    def test_and_cache(self, model_id, model):
-        if model_id in self.__test_cache.keys():
-            return self.__test_cache[model_id]
+    def test_evaluation(self, model):
+        if model.model_id in self.__test_cache.keys():
+            return self.__test_cache[model.model_id]
         res = model.evaluate(self.__x_test, self.__y_test)
-        self.__test_cache[model_id] = res
+        self.__test_cache[model.model_id] = res
         return res
+
+    @property
+    def is_byzantine(self):
+        return self.byzantine is not None
 
     def open_task(self, task: Task):
         tx = self.make_new_transaction(
-            TxTypeEnum.OPEN, 
-            task.task_id, 
-            [ Reference(self.tx_graph.genesis_tx.txid, [None, None]) ]
+            tx_type=TxTypeEnum.OPEN, 
+            task_id=task.task_id,
+            model_id=task.model_id,
+            refs=[ Reference(self.tx_graph.genesis_tx.txid, [None, None]) ]
         )
-        self.model_table[tx.model_id] = task.task_model
-        self.send_new_transaction(tx)
+        self.upload_model_and_update_current_model(task.task_model)
+        self.will_send_transaction(tx)
 
     def init_local_train(self, task: Task):
         basic_model = task.create_base_model()
         basic_model.fit(self.__x_train, self.__y_train)
-        self.model_id = 'local' + self.nid
-        self.model_table[self.model_id] = basic_model
-        self.test_and_cache(self.model_id, basic_model)
+        self.upload_model_and_update_current_model(basic_model)
+        self.test_evaluation(basic_model)
     
     def update(self, task: Task):
         selected_txs = self.select_transactions()
         if len(selected_txs) is 0:
             return
+        print(selected_txs)
         selected_models = [ self.model_table[tx.model_id] for tx in selected_txs ]
         
         new_model = self.updating.update(selected_models, task)
+        new_eval = self.test_evaluation(new_model)
+        prev_eval = self.test_evaluation(self.current_model)
 
-        new_eval = new_model.evaluate(self.__x_test, self.__y_test)
-        prev_eval = self.test_and_cache(self.model_id, self.current_model)
         if self.comparison.satisfied(prev_eval, new_eval):
+            self.upload_model_and_update_current_model(new_model)
+
             new_tx = self.make_new_transaction(
                 TxTypeEnum.SOLVE,
-                self.task_id, 
+                self.task_id,
+                new_model.model_id,
                 [ Reference(tx.txid, self.tx_graph.get_evaluation_result(tx.model_id)) \
                     for tx in selected_txs ]
             )
-            self.model_table[new_tx.model_id] = new_model
-            self.__test_cache[new_tx.model_id] = new_eval
-            self.model_id = new_tx.model_id
-            self.send_new_transaction(new_tx)
+            self.will_send_transaction(new_tx)
     
 
     def __str__(self):
@@ -149,4 +157,4 @@ class Node:
             "\ncurrent model id: " + self.model_id + \
             "\ntransaction info: " + str(self.tx_graph.get_transaction_by_id(self.model_id)) + \
             "\nevaluation rate: " + str(self.eval_rate) + \
-            "\ncurr eval: " + str(self.__test_cache[self.model_id] )
+            "\ncurr eval: " + str(self.test_evaluation(self.current_model) )

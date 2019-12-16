@@ -29,7 +29,12 @@ class TxGraph:
 
     # Transaction related methods
     def generate_genesis(self):
-        genesis = Transaction(TxTypeEnum.NONE, '', 0, [])
+        genesis = Transaction(
+            tx_type=TxTypeEnum.NONE, 
+            task_id='',
+            model_id='', 
+            timestamp=0, 
+            refs=[])
         self.genesis_tx = genesis
     
     def has_transaction(self, tx):
@@ -41,10 +46,10 @@ class TxGraph:
     def add_missing_transaction(self, txid):
         self.missing_transactions.union(txid)
 
-    def evaluate_and_record_model(self, model_id: str, model: FLModel):
-        if model_id in self.model_evaluated_results:
+    def evaluate_and_record_model(self, model: FLModel):
+        if model.model_id in self.model_evaluated_results:
             return
-        self.model_evaluated_results[model_id] = model.evaluate(self.x_eval, self.y_eval)
+        self.model_evaluated_results[model.model_id] = model.evaluate(self.x_eval, self.y_eval)
 
     def get_evaluation_result(self, model_id):
         return self.model_evaluated_results[model_id]
@@ -56,8 +61,6 @@ class TxGraph:
             return None
     
     def get_transaction_list_by_ids(self, txids):
-        print(txids)
-        
         return [ self.get_transaction_by_id(txid) for txid in txids if txid is not None ]
 
     def get_all_predecessors_by_id(self, txid):

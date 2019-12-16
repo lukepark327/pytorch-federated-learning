@@ -14,6 +14,10 @@ def parser():
                         help='mnist/ fashion_mnist / cifar10')
     parser.add_argument('--dist', type=str, default='uniform',
                         help='uniform / random')
+    parser.add_argument('--evalrate', type=float, default=0.3,
+                        help="nodes' evaluation frequency 0~1")
+    parser.add_argument('--updaterate', type=str, default=0.3,
+                        help="nodes' update frequency 0~1")
     
     args = parser.parse_args()
     return args

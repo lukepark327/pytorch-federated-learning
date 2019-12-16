@@ -20,4 +20,4 @@ def cal_weights_hash(weights: list):
     for weight in weights:
         b = weight.tobytes()
         weights_list.append(b)
-    return sha3_256(weights_list)
+    return sha3_256_from_array(weights_list)

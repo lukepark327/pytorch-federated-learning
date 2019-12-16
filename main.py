@@ -1,10 +1,11 @@
 import numpy as np
 import random
+from pprint import pprint
 
 # from utils.global_dict import GlobalDict
 from network.node import Node
 from network.graph import TxGraph
-from network.transaction import Transaction, TxTypeEnum, Reference
+from network.transaction import Transaction, TxTypeEnum, Reference, generate_genesis_tx
 from policy.selection import Selection, SelectionTypeEnum
 from policy.updating import Updating, UpdatingTypeEnum
 from policy.comparison import Comparison, Metric
@@ -26,6 +27,8 @@ if __name__ == "__main__":
     number_of_epochs = args.epochs
     data_id = args.dataid
     dist_str = args.dist
+    eval_rate = args.evalrate
+    update_rate = args.updaterate
 
     # Task definition
     simple_model = create_simple_sequential_model(
@@ -67,7 +70,8 @@ if __name__ == "__main__":
     # Node setting
     # TODO: Make selection, updating, comparison policies organized by config file
     nodes = list()
-    genesis_tx = Transaction(TxTypeEnum.NONE, simple_task.task_id, '', global_time, [])
+    genesis_tx = generate_genesis_tx()
+
     for i in range(number_of_nodes):
         new_txgraph = TxGraph(
             genesis_tx=genesis_tx, 
@@ -81,6 +85,7 @@ if __name__ == "__main__":
             updating_type=UpdatingTypeEnum.CONTINUAL,
             x_train=x_train[i],
             y_train=y_train[i],
+            owner=str(i),
         )
         comparison = Comparison(
             metric=Metric.ACC,
@@ -93,7 +98,7 @@ if __name__ == "__main__":
             global_model_table=global_model_dict,
             train_set=(x_train[i], y_train[i]),
             test_set=(x_test[i], y_test[i]),
-            eval_rate=0.8,
+            eval_rate=eval_rate,
             tx_graph=new_txgraph,
             selection=selection,
             updating=updating,
@@ -127,7 +132,7 @@ if __name__ == "__main__":
         
         for node in nodes:
             # update probability
-            if random.random() < 0.3:
+            if random.random() < update_rate:
                 node.update(simple_task)
 
         for node in nodes:
@@ -141,8 +146,7 @@ if __name__ == "__main__":
     for node in nodes:
         model_set.add(node.model_id)
     for mid in model_set:
-        print(mid)
         model = global_model_dict[mid]
+        print(model)
         eval_dict[mid] = global_model_dict[mid].evaluate(global_x_test, global_y_test)
         print(eval_dict[mid])
-        

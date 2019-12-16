@@ -31,6 +31,10 @@ class Task:
     def task_model(self):
         return self.__model
 
+    @property
+    def model_id(self):
+        return self.__model.model_id
+
     def create_base_model(self):
         return self.__create_func(
             optimizer=self.optimizer,

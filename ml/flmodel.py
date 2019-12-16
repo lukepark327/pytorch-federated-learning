@@ -1,6 +1,8 @@
 import tensorflow as tf
 from enum import Enum
 
+from utils.hash import cal_weights_hash
+
 
 class Metric(Enum):
     LOSS = 'loss'
@@ -8,9 +10,10 @@ class Metric(Enum):
 
 
 class FLModel:
-    def __init__(self, compiled_model, epochs):
+    def __init__(self, compiled_model, epochs, previous_history=[]):
         self.model = compiled_model
         self.__epochs = epochs
+        self.__history_list = previous_history
 
     def fit(self, x_train, y_train, callbacks=[], verbose=0):
         self.model.fit(
@@ -20,6 +23,10 @@ class FLModel:
     def evaluate(self, x_test, y_test, verbose=0):
         self.__evaluation = self.model.evaluate(x_test, y_test, verbose=verbose)
         return self.__evaluation
+
+    @property
+    def model_id(self):
+        return cal_weights_hash(self.weights)
 
     @property
     def epochs(self):
@@ -39,3 +46,22 @@ class FLModel:
 
     def predict(self, x_input):
         return self.model.predict(x_input)
+
+    @property
+    def history(self):
+        return self.__history_list
+    
+    @history.setter
+    def history(self, history_list):
+        self.__history_list = history_list
+
+    def add_history(self, new_history):
+        self.__history_list.append(new_history)
+
+    def __str__(self):
+        s = "Model Object: \nModel ID: " + self.model_id
+        s = s + "\nhistory list: "
+        for history in self.__history_list:
+            s += "\n\t" + str(history)
+        
+        return s
