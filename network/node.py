@@ -3,7 +3,7 @@ from copy import copy
 
 from .graph import TxGraph
 from .transaction import Transaction, TxTypeEnum, Reference
-# from .byzantine import Byzantine
+from .byzantine import Byzantine
 from ml.task import Task, compile_model
 from policy.selection import Selection
 from policy.updating import Updating
@@ -16,7 +16,7 @@ class Node:
         global_model_table, train_set, test_set, eval_rate,
         tx_graph: TxGraph, 
         selection: Selection, updating: Updating, comparison: Comparison,
-        adjacent_list=list(), byzantine = None, 
+        adjacent_list=list(), byzantine: Byzantine = None, 
         model_id=None,
         ):
         self.nid = nid
@@ -101,6 +101,8 @@ class Node:
         self.__test_cache = dict()
 
     def test_evaluation(self, model):
+        if model is None:
+            return []
         if model.model_id in self.__test_cache.keys():
             return self.__test_cache[model.model_id]
         res = model.evaluate(self.__x_test, self.__y_test)
@@ -129,6 +131,11 @@ class Node:
     def init_local_train(self, task: Task, open_tx: Transaction, tx_making_rate: float):
         basic_model = task.create_base_model()
         basic_model.fit(self.__x_train, self.__y_train)
+        basic_model.add_history(
+            self.updating.make_new_history(
+                [ task.model_id ], basic_model, copy(self.time.value)
+            )
+        )
         self.upload_model_and_update_current_model(basic_model)
         self.test_evaluation(basic_model)
         if random() < tx_making_rate:
@@ -162,13 +169,17 @@ class Node:
                     for tx in selected_txs ]
             )
             self.will_send_transaction(new_tx)
-    
 
     def __str__(self):
+        if self.current_model is None:
+            return "\nnode id: " + self.nid + \
+                "\nlength of data: " + str(len(self.__x_train)) + \
+                "\nadjacent nodes: " + str([ 'node id: ' + n.nid for n in self.adjacent_list ]) + \
+                "\ncurrent model: None"
         return "\nnode id: " + self.nid + \
             "\nlength of data: " + str(len(self.__x_train)) + \
             "\nadjacent nodes: " + str([ 'node id: ' + n.nid for n in self.adjacent_list ]) + \
-            "\ncurrent model id: " + self.model_id + \
+            "\ncurrent model id: " + str(self.model_id) + \
             "\ncurrent model history: " + str(self.current_model.history) + \
             "\ntransaction info: " + str(self.tx_graph.get_transaction_by_model_id(self.model_id)) + \
             "\nevaluation rate: " + str(self.eval_rate) + \

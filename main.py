@@ -6,6 +6,7 @@ from pprint import pprint
 from network.node import Node
 from network.graph import TxGraph
 from network.transaction import Transaction, TxTypeEnum, Reference, generate_genesis_tx
+from network.byzantine import Byzantine, ByzantineType, corrupt_ten_labeled_data
 from policy.selection import Selection, SelectionTypeEnum
 from policy.updating import Updating, UpdatingTypeEnum
 from policy.comparison import Comparison, Metric
@@ -72,7 +73,7 @@ if __name__ == "__main__":
     # TODO: Make selection, updating, comparison policies organized by config file
     nodes = list()
     genesis_tx = generate_genesis_tx()
-
+    byzantines = np.random.choice(number_of_nodes, 0, replace=False)
     for i in range(number_of_nodes):
         new_txgraph = TxGraph(
             genesis_tx=genesis_tx, 
@@ -106,6 +107,13 @@ if __name__ == "__main__":
             updating=updating,
             comparison=comparison
         )
+        if i in byzantines:
+            byzantine = Byzantine(
+                byzantine_type=ByzantineType.CORRUPTED_DATA_SET
+            )
+            new_node.byzantine = byzantine
+            corrupt_ten_labeled_data(x_train[i], y_train[i], 4, 9)
+
         # Each node has its own local trained result
         # The results are recorded on global_model_dict['local-(node_id)']
         nodes.append(new_node)
@@ -129,13 +137,13 @@ if __name__ == "__main__":
     for i in range(number_of_rounds):
         print("Round: ", i)
         for node in nodes:
-            if nodes[i].model_id is None:
-            if nodes[i].tx_graph.has_transaction(open_tx):
-                nodes[i].init_local_train(
-                    task=simple_task,
-                    open_tx=open_tx,
-                    tx_making_rate=update_rate
-                )
+            if node.model_id is None:
+                if node.tx_graph.has_transaction(open_tx):
+                    node.init_local_train(
+                        task=simple_task,
+                        open_tx=open_tx,
+                        tx_making_rate=update_rate
+                    )
             node.send_txs_in_buffer()
         
         for node in nodes:
@@ -152,9 +160,10 @@ if __name__ == "__main__":
     eval_dict = dict()
     
     for node in nodes:
-        print(node)
-        print(global_model_dict[node.model_id].evaluate(global_x_test, global_y_test))
-        model_set.add(node.model_id)
+        if node.current_model is not None:
+            print(node)
+            print(global_model_dict[node.model_id].evaluate(global_x_test, global_y_test))
+            model_set.add(node.model_id)
 
     print("model set")
     print(len(model_set))

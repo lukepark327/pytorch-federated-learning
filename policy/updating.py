@@ -25,21 +25,25 @@ class Updating:
         self.x_train = x_train
         self.y_train = y_train
 
-    def make_new_history(self, prev_models, new_model, timestamp):
+    def make_new_history(self, ref_ids, new_model, timestamp):
         return {
             "owner": self.owner,
             "type": self.type.name,
             "timestamp": timestamp,
             "model_id": new_model.model_id,
-            "ref_ids": [ p.model_id for p in prev_models ]
+            "ref_ids": ref_ids
         }
     
     def add_history_to_new_model(self, prev_models, new_model, timestamp):
         prev_histories = []
         for prev_model in prev_models:
-            prev_histories.append(prev_model.history)
+            prev_histories = prev_histories + prev_model.history
         new_model.history = prev_histories
-        new_history = self.make_new_history(prev_models, new_model, timestamp)
+        new_history = self.make_new_history(
+            [ p.model_id for p in prev_models ], 
+            new_model, 
+            timestamp
+        )
         new_model.add_history(new_history)
 
 
