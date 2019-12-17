@@ -65,3 +65,10 @@ class FLModel:
             s += "\n\t" + str(history)
         
         return s
+
+    @property
+    def meta(self):
+        return {
+            "ID": self.model_id,
+            "History": self.__history_list,
+        }

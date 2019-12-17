@@ -1,7 +1,7 @@
 import numpy as np
 import random
 from copy import copy
-from pprint import pprint
+import json
 
 # from utils.global_dict import GlobalDict
 from network.node import Node
@@ -16,12 +16,14 @@ from ml.flmodel import FLModel
 from data.load import load_data
 from utils.arguments import parser
 from utils.global_dict import GlobalTime
+from results.event import Event, EventType
 
 if __name__ == "__main__":
     # Global references
     global_model_dict = dict()
     global_task_dict = dict()
     global_time = GlobalTime()
+    event_log = list()
 
     # Arguments
     args = parser()
@@ -32,6 +34,18 @@ if __name__ == "__main__":
     dist_str = args.dist
     eval_rate = args.evalrate
     update_rate = args.updaterate
+    number_of_byzantines = 4
+
+    event_exp_begin_meta = {
+        "Number of nodes": number_of_nodes,
+        "Number of Byzantines": number_of_byzantines,
+        "Number of rounds": number_of_rounds,
+        "Data ID": data_id,
+        "Data distribution": dist_str,
+        "Evaluation Rate": eval_rate,
+        "Update Rate": update_rate,
+    }
+    event_log.append(Event(EventType.EXPERIMENT_BEGIN, event_exp_begin_meta))
 
     # Task definition
     simple_model = create_simple_sequential_model(
@@ -50,6 +64,15 @@ if __name__ == "__main__":
         model=simple_model
     )
     global_task_dict[simple_task.task_id] = simple_task
+
+    event_task_created_meta = {
+        "Task ID": simple_task.task_id,
+        "Optimizer": simple_task.optimizer,
+        "Loss": simple_task.loss,
+        "Metrics": simple_task.metrics, 
+        "Number of epochs": simple_task.epochs,
+    }
+    event_log.append(Event(EventType.TASK_CREATED, event_task_created_meta))
 
     # Data distribution
     x_train, y_train, x_test, y_test = load_data(data_id)
@@ -74,9 +97,8 @@ if __name__ == "__main__":
     # TODO: Make selection, updating, comparison policies organized by config file
     nodes = list()
     genesis_tx = generate_genesis_tx()
-    byzantines = np.random.choice(number_of_nodes - 1, 4, replace=False)
-    print("Byzantines: ")
-    print(byzantines)
+    event_log.append(Event(EventType.TX_CREATED, genesis_tx.meta))
+    byzantines = np.random.choice(number_of_nodes - 1, number_of_byzantines, replace=False)
     for i in range(number_of_nodes):
         new_txgraph = TxGraph(
             genesis_tx=genesis_tx, 
@@ -125,6 +147,7 @@ if __name__ == "__main__":
         # Each node has its own local trained result
         # The results are recorded on global_model_dict['local-(node_id)']
         nodes.append(new_node)
+        event_log.append(Event(EventType.NODE_CREATED, new_node.meta))
 
     # Set adjacent nodes
     # TODO: Random 
@@ -133,46 +156,60 @@ if __name__ == "__main__":
     for i in range(number_of_nodes):
         choices = np.random.choice(number_of_nodes, num_of_adjacent, replace=False)
         nodes[i].adjacent_list = [ nodes[j] for j in choices if j.item is not i ]
-    
+        event_log.append(Event(EventType.NODE_CONNECTED, {
+            "From": nodes[i].nid,
+            "To": [ n.nid for n in nodes[i].adjacent_list ]
+        }))
     # Tick!
     global_time.tick()
 
     # Make the first task transaction by node 0
     open_tx = nodes[0].open_task(task=simple_task)
-    print(nodes[0])
+    event_log.append(Event(EventType.TX_CREATED, open_tx.meta))
 
     # Simulate the network
     for i in range(number_of_rounds):
-        print("### Round: ", i)
+        event_log.append(Event(EventType.ROUND_START, { "Timestamp": global_time.value }))
         for node in nodes:
-            node.send_txs_in_buffer()
+            event_log += node.send_txs_in_buffer()
         
         for node in nodes:
             # If node has not made any model, train locally
             if node.model_id is None:
                 if node.tx_graph.has_transaction(open_tx):
-                    node.init_local_train(
+                    events = node.init_local_train(
                         task=simple_task,
                         open_tx=open_tx,
                         tx_making_rate=update_rate
                     )
+                    event_log += events
             # Node updates its model with probability
             if random.random() < update_rate:
-                node.update(simple_task)
+                events = node.update(simple_task)
+                event_log += events
 
         for node in nodes:
-            node.get_transactions_from_buffer()
-        
+            events = node.get_transactions_from_buffer()
+            event_log += events
+
+        event_log.append(Event(EventType.ROUND_END, { "Timestamp": global_time.value }))
         global_time.tick()
     
-    model_set = set()
-    eval_dict = dict()
-    
+    end_events = []
+
     for node in nodes:
         if node.current_model is not None:
-            print(node)
-            print(global_model_dict[node.model_id].evaluate(global_x_test, global_y_test))
-            model_set.add(node.model_id)
+            end_event = Event(EventType.NODE_RESULT, {
+                "Node Meta": node.meta,
+                "Local Eval on Current Model": node.test_evaluation(node.current_model),
+                "Global Eval on Current Model": global_model_dict[node.model_id].evaluate(global_x_test, global_y_test),
+            })
+            end_events.append(end_event)
 
-    print("model set")
-    print(len(model_set))
+    event_log += end_events
+
+    with open("result.txt", "w") as f:
+        for event in event_log:
+            f.write(str(event))
+
+    print('end')

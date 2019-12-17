@@ -1,0 +1,41 @@
+{
+    "base_acc_mnist": {
+        "node_number": 21,
+        "task": "mnist",
+        "epochs": 1,
+        "peer_number": 5,
+        "byzantine number": 0,
+        "distribution": "uniform",
+        "evaluation_rate": 0.5,
+        "update_rate": 0.3,
+        "compare_metric": "accuracy",
+        "compare_threshold": 0.01,
+        "init_tx_making_rate": 0.3
+    },
+    "base_acc_f_mnist": {
+        "node_number": 21,
+        "task": "fashion_mnist",
+        "epochs": 1,
+        "peer_number": 5,
+        "byzantine number": 0,
+        "distribution": "uniform",
+        "evaluation_rate": 0.5,
+        "update_rate": 0.3,
+        "compare_metric": "accuracy",
+        "compare_threshold": 0.01,
+        "init_tx_making_rate": 0.3
+    },
+    "base_loss_mnist": {
+        "node_number": 21,
+        "task": "mnist",
+        "epochs": 1,
+        "peer_number": 5,
+        "byzantine number": 0,
+        "distribution": "uniform",
+        "evaluation_rate": 0.5,
+        "update_rate": 0.3,
+        "compare_metric": "loss",
+        "compare_threshold": 0.05,
+        "init_tx_making_rate": 0.3
+    }
+}

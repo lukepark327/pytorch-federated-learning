@@ -2,6 +2,7 @@ from enum import Enum
 import numpy as np
 
 from utils.hash import sha3_256_from_array, cal_weights_hash
+from results.event import Event, EventType
 
 class Reference:
     """
@@ -45,6 +46,17 @@ class Transaction:
     @property
     def ref_ids(self):
         return [r.txid for r in self.refs]
+
+    @property
+    def meta(self):
+        return {
+            "ID": self.txid,
+            "Type": self.type.value,
+            "Owner": self.owner,
+            "Model ID": self.model_id,
+            "Timestamep": self.timestamp,
+            "References": str(self.refs),
+        }
 
     def __str__(self):
         return (
