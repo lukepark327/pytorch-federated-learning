@@ -10,7 +10,7 @@ class Metric(Enum):
 
 
 class FLModel:
-    def __init__(self, compiled_model, epochs, previous_history=[]):
+    def __init__(self, compiled_model, epochs, previous_history=list()):
         self.model = compiled_model
         self.__epochs = epochs
         self.__history_list = previous_history

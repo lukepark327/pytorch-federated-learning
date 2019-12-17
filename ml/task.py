@@ -51,13 +51,14 @@ def create_simple_sequential_model(optimizer, loss, metrics, epochs):
         tf.keras.layers.Dropout(0.2),
         tf.keras.layers.Dense(10, activation=tf.nn.softmax)
     ])
-    return compile_model(model, optimizer, loss, metrics, epochs)
+    empty_history = list()
+    return compile_model(model, optimizer, loss, metrics, epochs, empty_history)
 
-def compile_model(model, optimizer, loss, metrics, epochs):
+def compile_model(model, optimizer, loss, metrics, epochs, prev_history):
     model.compile(
         optimizer=optimizer,
         loss=loss,
         metrics=metrics,
     )
-    return FLModel(compiled_model=model, epochs=epochs)
+    return FLModel(compiled_model=model, epochs=epochs, previous_history=prev_history)
     

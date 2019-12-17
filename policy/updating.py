@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import List
-from copy import deepcopy
+from copy import deepcopy, copy
 import numpy as np
 
 from ml.task import Task, compile_model
@@ -36,8 +36,11 @@ class Updating:
     
     def add_history_to_new_model(self, prev_models, new_model, timestamp):
         prev_histories = []
-        for prev_model in prev_models:
-            prev_histories = prev_histories + prev_model.history
+        if len(prev_models) is 1:
+            prev_histories = prev_histories + prev_models[0].history
+        else:
+            for prev_model in prev_models:
+                prev_histories = prev_histories.append(prev_model.history)
         new_model.history = prev_histories
         new_history = self.make_new_history(
             [ p.model_id for p in prev_models ], 

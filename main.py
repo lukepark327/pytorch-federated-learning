@@ -135,8 +135,12 @@ if __name__ == "__main__":
 
     # Simulate the network
     for i in range(number_of_rounds):
-        print("Round: ", i)
+        print("### Round: ", i)
         for node in nodes:
+            node.send_txs_in_buffer()
+        
+        for node in nodes:
+            # If node has not made any model, train locally
             if node.model_id is None:
                 if node.tx_graph.has_transaction(open_tx):
                     node.init_local_train(
@@ -144,10 +148,7 @@ if __name__ == "__main__":
                         open_tx=open_tx,
                         tx_making_rate=update_rate
                     )
-            node.send_txs_in_buffer()
-        
-        for node in nodes:
-            # update probability
+            # Node updates its model with probability
             if random.random() < update_rate:
                 node.update(simple_task)
 
