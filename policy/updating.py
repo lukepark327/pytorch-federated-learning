@@ -40,7 +40,7 @@ class Updating:
             prev_histories = prev_histories + prev_models[0].history
         else:
             for prev_model in prev_models:
-                prev_histories = prev_histories.append(prev_model.history)
+                prev_histories.append(prev_model.history)
         new_model.history = prev_histories
         new_history = self.make_new_history(
             [ p.model_id for p in prev_models ], 

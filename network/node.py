@@ -179,6 +179,7 @@ class Node:
         return "\nnode id: " + self.nid + \
             "\nlength of data: " + str(len(self.__x_train)) + \
             "\nadjacent nodes: " + str([ 'node id: ' + n.nid for n in self.adjacent_list ]) + \
+            "\nbyzantine: " + str(self.is_byzantine) + \
             "\ncurrent model id: " + str(self.model_id) + \
             "\ncurrent model history: " + str(self.current_model.history) + \
             "\ntransaction info: " + str(self.tx_graph.get_transaction_by_model_id(self.model_id)) + \

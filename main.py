@@ -1,5 +1,6 @@
 import numpy as np
 import random
+from copy import copy
 from pprint import pprint
 
 # from utils.global_dict import GlobalDict
@@ -73,7 +74,9 @@ if __name__ == "__main__":
     # TODO: Make selection, updating, comparison policies organized by config file
     nodes = list()
     genesis_tx = generate_genesis_tx()
-    byzantines = np.random.choice(number_of_nodes, 0, replace=False)
+    byzantines = np.random.choice(number_of_nodes - 1, 4, replace=False)
+    print("Byzantines: ")
+    print(byzantines)
     for i in range(number_of_nodes):
         new_txgraph = TxGraph(
             genesis_tx=genesis_tx, 
@@ -92,28 +95,33 @@ if __name__ == "__main__":
         )
         comparison = Comparison(
             metric=Metric.ACC,
-            threshold=0.05,
+            threshold=0.01,
         )
+        local_x_train = copy(x_train[i])
+        local_y_train = copy(y_train[i])
+        local_x_test = copy(x_test[i])
+        local_y_test = copy(y_test[i])
+
         new_node = Node(
             nid=str(i),
             global_time=global_time,
             task_id=simple_task.task_id,
             global_model_table=global_model_dict,
-            train_set=(x_train[i], y_train[i]),
-            test_set=(x_test[i], y_test[i]),
+            train_set=(local_x_train, local_y_train),
+            test_set=(local_x_test, local_y_test),
             eval_rate=eval_rate,
             tx_graph=new_txgraph,
             selection=selection,
             updating=updating,
             comparison=comparison
         )
-        if i in byzantines:
+        if i + 1 in byzantines:
             byzantine = Byzantine(
                 byzantine_type=ByzantineType.CORRUPTED_DATA_SET
             )
             new_node.byzantine = byzantine
-            corrupt_ten_labeled_data(x_train[i], y_train[i], 4, 9)
-
+            corrupt_ten_labeled_data(local_x_train, local_y_train, 4, 9)
+            corrupt_ten_labeled_data(local_x_test, local_y_test, 4, 9) 
         # Each node has its own local trained result
         # The results are recorded on global_model_dict['local-(node_id)']
         nodes.append(new_node)
