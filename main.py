@@ -126,11 +126,9 @@ if __name__ == "__main__":
             current_nodes.append(new_node)
 
         """log"""
-        print(">>> activated_nodes:", activateds)
+        print(">>> activated_clients:", activateds)
         print(">>> latest_nodes:", [d.get_id() for d in latest_nodes])
         print(">>> current_nodes:", [d.get_id() for d in current_nodes])
         print(">>> current_accs:", current_accs)
 
         latest_nodes = deepcopy(current_nodes)
-        
-
