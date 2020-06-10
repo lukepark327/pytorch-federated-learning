@@ -9,7 +9,7 @@ def parser():
 
     parser.add_argument('--nodes', metavar='N', type=int, default=100,
                         help='total number of nodes')
-    parser.add_argument('--round', metavar='R', type=int, default=5000,
+    parser.add_argument('--rounds', metavar='R', type=int, default=5000,
                         help='number of rounds')
 
     args = parser.parse_args()
