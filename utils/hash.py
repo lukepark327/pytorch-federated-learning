@@ -1,5 +1,5 @@
 import hashlib
-
+import numpy as np
 
 class MetaFunc:
     def __init__(self, name=None, func=None):
@@ -7,9 +7,10 @@ class MetaFunc:
         self.func = func
 
 
-def sha3_256(inputs=[]):
+def sha3_256_from_array(inputs=[]):
     SHA3 = hashlib.sha3_256()
-    for i in inputs:
+    bytes_array = [np.array(inputs).tobytes()]
+    for i in bytes_array:
         SHA3.update(i)
     return SHA3.hexdigest()
 
@@ -19,9 +20,4 @@ def cal_weights_hash(weights: list):
     for weight in weights:
         b = weight.tobytes()
         weights_list.append(b)
-    return sha3_256(weights_list)
-
-
-if __name__ == "__main__":
-    hash_output = sha3_256([b'1', b'2', b'3'])
-    print(hash_output, type(hash_output))
+    return sha3_256_from_array(weights_list)

@@ -1,230 +1,215 @@
-# from multiprocessing import Pool
-import tensorflow as tf
 import numpy as np
-import time
+import random
+from copy import copy
+import json
 
-import arguments
-from flmodel import Flmodel
-from blockchain import Transaction, Blockchain
-from node import Node
-
+# from utils.global_dict import GlobalDict
+from network.node import Node
+from network.graph import TxGraph
+from network.transaction import Transaction, TxTypeEnum, Reference, generate_genesis_tx
+from network.byzantine import Byzantine, ByzantineType, corrupt_ten_labeled_data
+from policy.selection import Selection, SelectionTypeEnum
+from policy.updating import Updating, UpdatingTypeEnum
+from policy.comparison import Comparison, Metric
+from ml.task import Task, create_simple_sequential_model
+from ml.flmodel import FLModel
+from data.load import load_data
+from utils.arguments import parser
+from utils.global_dict import GlobalTime
+from results.event import Event, EventType
 
 if __name__ == "__main__":
-    def create_model():
-        mnist_model = tf.keras.models.Sequential([
-            tf.keras.layers.Flatten(input_shape=(28, 28)),
-            tf.keras.layers.Dense(512, activation=tf.nn.relu),
-            tf.keras.layers.Dropout(0.2),
-            tf.keras.layers.Dense(10, activation=tf.nn.softmax)
-        ])
-        mnist_model.compile(
-            optimizer='adam',
-            loss='sparse_categorical_crossentropy',
-            metrics=['accuracy'])
-        return Flmodel(mnist_model)
+    # Global references
+    global_model_dict = dict()
+    global_task_dict = dict()
+    global_time = GlobalTime()
+    event_log = list()
 
-    def my_policy_update_model_weights(self: Node, peer_weights: dict):
-        # get reputation
-        reputation = self.get_reputation()
-        if len(reputation) == 0:
-            raise ValueError
-        if len(reputation) != len(peer_weights):
-            raise ValueError
+    # Arguments
+    args = parser()
+    number_of_nodes = args.nodes
+    number_of_rounds = args.rounds
+    number_of_epochs = args.epochs
+    data_id = args.dataid
+    dist_str = args.dist
+    eval_rate = args.evalrate
+    update_rate = args.updaterate
+    number_of_byzantines = 4
 
-        ids = list(reputation.keys())
+    event_exp_begin_meta = {
+        "Number of nodes": number_of_nodes,
+        "Number of Byzantines": number_of_byzantines,
+        "Number of rounds": number_of_rounds,
+        "Data ID": data_id,
+        "Data distribution": dist_str,
+        "Evaluation Rate": eval_rate,
+        "Update Rate": update_rate,
+    }
+    event_log.append(Event(EventType.EXPERIMENT_BEGIN, event_exp_begin_meta))
 
-        # +1 for its own weights
-        total_reputation = sum(reputation.values()) + 1.
+    # Task definition
+    simple_model = create_simple_sequential_model(
+        optimizer='adam',
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy'],
+        epochs=number_of_epochs
+    )
+    simple_task = Task(
+        'simple_task',
+        create_simple_sequential_model,
+        optimizer='adam',
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy'],
+        epochs=number_of_epochs,
+        model=simple_model
+    )
+    global_task_dict[simple_task.task_id] = simple_task
 
-        # original weights
-        origin_weights = self.get_model_weights()
+    event_task_created_meta = {
+        "Task ID": simple_task.task_id,
+        "Optimizer": simple_task.optimizer,
+        "Loss": simple_task.loss,
+        "Metrics": simple_task.metrics, 
+        "Number of epochs": simple_task.epochs,
+    }
+    event_log.append(Event(EventType.TASK_CREATED, event_task_created_meta))
 
-        # set zero-filled NN layers
-        new_weights = list()
-        for layer in peer_weights[ids[0]]:
-            new_weights.append(np.zeros(layer.shape))
+    # Data distribution
+    x_train, y_train, x_test, y_test = load_data(data_id)
+    global_x_test, global_y_test = x_test, y_test
+    if dist_str == 'uniform':
+        from data.split import split_data_uniform
+        x_train = split_data_uniform(x_train, number_of_nodes)
+        y_train = split_data_uniform(y_train, number_of_nodes)
+        x_test = split_data_uniform(x_test, number_of_nodes)
+        y_test = split_data_uniform(y_test, number_of_nodes)
+    
+    else:
+        from data.split import random_choices, split_data_with_choices
+        choice_train = random_choices(len(x_train), number_of_nodes)
+        choice_test = random_choices(len(x_test), number_of_nodes)
+        x_train = split_data_with_choices(x_train, number_of_nodes)
+        y_train = split_data_with_choices(y_train, number_of_nodes)
+        x_test = split_data_with_choices(x_test, number_of_nodes)
+        y_test = split_data_with_choices(y_test, number_of_nodes)
 
-        # calculate new_weights
-        # TODO: threshold
-        # TODO: comparison
-        for i, layer in enumerate(new_weights):
-            for id in ids:
-                layer += peer_weights[id][i] * \
-                    reputation[id] / total_reputation
-            # because all reputations are 1. for example.
-            layer += origin_weights[i] / total_reputation
-
-        # set new_weights
-        self.set_model_weights(new_weights)
-
-    def equally_fully_connected(my_id: str, ids: list):
-        reputation = dict()
-        for id in ids:
-            if id == my_id:
-                continue
-            reputation[id] = 1.
-        return reputation
-
-    def my_policy_update_txs_weight(self: Blockchain, id: str):
-        amount = self.get_transaction_by_id(id).weight
-        predecessors_ids = self.get_all_predecessors_by_id(id)
-        for p_id in predecessors_ids:
-            p_tx = self.get_transaction_by_id(p_id)
-            p_tx.weight += amount
-
-    def avg_time(times):
-        if len(times) == 0:
-            return 0.0
-        else:
-            return sum(times) / len(times)
-
-    """main"""
-
-    # arguments
-    args = arguments.parser()
-    num_nodes = args.nodes
-    num_round = args.round
-    print("> Setting:", args)
-
-    # load data
-    mnist = tf.keras.datasets.fashion_mnist
-    (x_train, y_train), (x_test, y_test) = mnist.load_data()
-    x_train, x_test = x_train / 255.0, x_test / 255.0
-
-    # split dataset
-    # +1 for master testset
-    my_x_train = np.array_split(x_train, (num_nodes + 1))
-    my_y_train = np.array_split(y_train, (num_nodes + 1))
-    my_x_test = np.array_split(x_test, (num_nodes + 1))
-    my_y_test = np.array_split(y_test, (num_nodes + 1))
-
-    master_testset_X = np.concatenate((my_x_train[-1], my_x_test[-1]))
-    master_testset_Y = np.concatenate((my_y_train[-1], my_y_test[-1]))
-    my_x_train = my_x_train[:-1]
-    my_y_train = my_y_train[:-1]
-    my_x_test = my_x_test[:-1]
-    my_y_test = my_y_test[:-1]
-
-    # set nodes
-    ids = [str(i) for i in range(num_nodes)]
+    # Node setting
+    # TODO: Make selection, updating, comparison policies organized by config file
     nodes = list()
-    for i, id in enumerate(ids):
-        nodes.append(Node(
-            id,
-            create_model(),
-            my_x_train[i], my_y_train[i],
-            my_x_test[i], my_y_test[i],
-            equally_fully_connected(id, ids),
-            policy_update_model_weights_name="equal",
-            policy_update_model_weights_func=my_policy_update_model_weights))
+    genesis_tx = generate_genesis_tx()
+    event_log.append(Event(EventType.TX_CREATED, genesis_tx.meta))
+    byzantines = np.random.choice(number_of_nodes - 1, number_of_byzantines, replace=False)
+    for i in range(number_of_nodes):
+        new_txgraph = TxGraph(
+            genesis_tx=genesis_tx, 
+            eval_set=(x_train[i], y_train[i])
+        )
+        selection = Selection(
+            selection_type=SelectionTypeEnum.HIGH_EVAL_ACC_MODEL,
+            owner=str(i),
+            number_of_selection=1,
+        )
+        updating = Updating(
+            updating_type=UpdatingTypeEnum.CONTINUAL,
+            x_train=x_train[i],
+            y_train=y_train[i],
+            owner=str(i),
+        )
+        comparison = Comparison(
+            metric=Metric.ACC,
+            threshold=0.01,
+        )
+        local_x_train = copy(x_train[i])
+        local_y_train = copy(y_train[i])
+        local_x_test = copy(x_test[i])
+        local_y_test = copy(y_test[i])
 
-    # set blockchain
-    genesis_transaction = Transaction(
-        nodes[0].id,
-        int(time.time()),
-        flmodel=nodes[0].get_model())  # node 0
-    blockchain = Blockchain(
-        genesis_transaction,
-        policy_update_txs_weight_name="heaviest",
-        policy_update_txs_weight_func=my_policy_update_txs_weight)
-    # blockchain.print()
+        new_node = Node(
+            nid=str(i),
+            global_time=global_time,
+            task_id=simple_task.task_id,
+            global_model_table=global_model_dict,
+            train_set=(local_x_train, local_y_train),
+            test_set=(local_x_test, local_y_test),
+            eval_rate=eval_rate,
+            tx_graph=new_txgraph,
+            selection=selection,
+            updating=updating,
+            comparison=comparison
+        )
+        if i + 1 in byzantines:
+            byzantine = Byzantine(
+                byzantine_type=ByzantineType.CORRUPTED_DATA_SET
+            )
+            new_node.byzantine = byzantine
+            corrupt_ten_labeled_data(local_x_train, local_y_train, 4, 9)
+            corrupt_ten_labeled_data(local_x_test, local_y_test, 4, 9) 
+        # Each node has its own local trained result
+        # The results are recorded on global_model_dict['local-(node_id)']
+        nodes.append(new_node)
+        event_log.append(Event(EventType.NODE_CREATED, new_node.meta))
 
-    # round
-    # TODO: GPU
-    # TODO: websocket
-    elapsed_times = list()
-    for r in range(num_round):
-        start_time = time.time()
+    # Set adjacent nodes
+    # TODO: Random 
+    num_of_adjacent = 5
 
-        print("Round", r)
+    for i in range(number_of_nodes):
+        choices = np.random.choice(number_of_nodes, num_of_adjacent, replace=False)
+        nodes[i].adjacent_list = [ nodes[j] for j in choices if j.item is not i ]
+        event_log.append(Event(EventType.NODE_CONNECTED, {
+            "From": nodes[i].nid,
+            "To": [ n.nid for n in nodes[i].adjacent_list ]
+        }))
+    # Tick!
+    global_time.tick()
 
-        # train
+    # Make the first task transaction by node 0
+    open_tx = nodes[0].open_task(task=simple_task)
+    event_log.append(Event(EventType.TX_CREATED, open_tx.meta))
+
+    # Simulate the network
+    for i in range(number_of_rounds):
+        event_log.append(Event(EventType.ROUND_START, { "Timestamp": global_time.value }))
         for node in nodes:
-            node.fit_model(epochs=1)
-
-            # send transaction
-            # for example: NO references
-            tx = Transaction(
-                node.id,
-                int(time.time()),
-                flmodel=node.get_model())
-            blockchain.add_transaction(tx)
-
-            print("train :\tnode: %5s" % (node.id), end="\r")
-        print(" " * 73, end="\r")
-
-        # test
-        losses = list()
-        accuracies = list()
+            event_log += node.send_txs_in_buffer()
+        
         for node in nodes:
-            metrics = node.evaluate_model()
-            # print("test  :\t", node.id, loss, metrics)
-            losses.append(metrics[0])
-            accuracies.append(metrics[1])
-            print("own:\tnode: %5s\tloss: %7.4f\tacc : %7.4f," % (
-                node.id, metrics[0], metrics[1]), end="\r")
+            # If node has not made any model, train locally
+            if node.model_id is None:
+                if node.tx_graph.has_transaction(open_tx):
+                    events = node.init_local_train(
+                        task=simple_task,
+                        open_tx=open_tx,
+                        tx_making_rate=update_rate
+                    )
+                    event_log += events
+            # Node updates its model with probability
+            if random.random() < update_rate:
+                events = node.update(simple_task)
+                event_log += events
 
-        print(" " * 73, end="\r")
-        print("own:\tmax_loss: %7.4f\tmin_loss: %7.4f\tavg_loss: %7.4f" % (
-            max(losses), min(losses), sum(losses) / len(losses)))
-        print("own:\tmax_acc : %7.4f\tmin_acc : %7.4f\tavg_acc : %7.4f" % (
-            max(accuracies), min(accuracies), sum(accuracies) / len(accuracies)))
-
-        # update weights
         for node in nodes:
-            # get neighbors weights
-            peer_weights = dict()
-            for peer in nodes:
-                if peer.id == node.id:
-                    continue
-                # peer_weights[peer.id] = peer.get_model_weights()
-                peer_weights[peer.id] = blockchain.get_latest_transaction_by_owner(
-                    peer.id).flmodel.get_weights()
+            events = node.get_transactions_from_buffer()
+            event_log += events
 
-            # TODO: duplicated weight update problem on the earliest nodes.
-            node.update_model_weights(node, peer_weights)
-            print("update:\tnode: %5s" % (node.id), end="\r")
-        print(" " * 73, end="\r")
+        event_log.append(Event(EventType.ROUND_END, { "Timestamp": global_time.value }))
+        global_time.tick()
+    
+    end_events = []
 
-        # test
-        losses = list()
-        accuracies = list()
-        for node in nodes:
-            metrics = node.evaluate_model()
-            # print("update:\t", node.id, loss, metrics)
-            losses.append(metrics[0])
-            accuracies.append(metrics[1])
-            print("mix:\tnode: %5s\tloss: %7.4f\tacc : %7.4f," % (
-                node.id, metrics[0], metrics[1]), end="\r")
+    for node in nodes:
+        if node.current_model is not None:
+            end_event = Event(EventType.NODE_RESULT, {
+                "Node Meta": node.meta,
+                "Local Eval on Current Model": node.test_evaluation(node.current_model),
+                "Global Eval on Current Model": global_model_dict[node.model_id].evaluate(global_x_test, global_y_test),
+            })
+            end_events.append(end_event)
 
-        print(" " * 73, end="\r")
-        print("mix:\tmax_loss: %7.4f\tmin_loss: %7.4f\tavg_loss: %7.4f" % (
-            max(losses), min(losses), sum(losses) / len(losses)))
-        print("mix:\tmax_acc : %7.4f\tmin_acc : %7.4f\tavg_acc : %7.4f" % (
-            max(accuracies), min(accuracies), sum(accuracies) / len(accuracies)))
+    event_log += end_events
 
-        # eval. by master testset
-        losses = list()
-        accuracies = list()
-        for node in nodes:
-            metrics = node.get_model().evaluate(
-                master_testset_X,
-                master_testset_Y)
-            # print("test  :\t", node.id, loss, metrics)
-            losses.append(metrics[0])
-            accuracies.append(metrics[1])
-            print("mst:\tnode: %5s\tloss: %7.4f\tacc : %7.4f," % (
-                node.id, metrics[0], metrics[1]), end="\r")
+    with open("result.txt", "w") as f:
+        for event in event_log:
+            f.write(str(event))
 
-        print(" " * 73, end="\r")
-        print("mst:\tmax_loss: %7.4f\tmin_loss: %7.4f\tavg_loss: %7.4f" % (
-            max(losses), min(losses), sum(losses) / len(losses)))
-        print("mst:\tmax_acc : %7.4f\tmin_acc : %7.4f\tavg_acc : %7.4f" % (
-            max(accuracies), min(accuracies), sum(accuracies) / len(accuracies)))
-
-        # time
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        elapsed_times.append(elapsed_time)
-        print("elapsed time: %f\tETA: %f" %
-              (elapsed_time, avg_time(elapsed_times)))
+    print('end')
