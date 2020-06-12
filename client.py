@@ -19,8 +19,18 @@ class Client:
                  testset,
                  net,
                  _id=None,
+                 lr: float = 1e-4,
+                 betas=(0.9, 0.999),
+                 weight_decay: float = 0.01,
+                 with_cuda: bool = True,
+                 cuda_devices=None
                  # TODO: multiple GPU
                  ):
+
+        # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        # Setup cuda device for BERT training, argument -c, --cuda should be true
+        cuda_condition = torch.cuda.is_available() and with_cuda
+        self.device = torch.device("cuda:0" if cuda_condition else "cpu")
 
         self.trainset = trainset
         if self.trainset is not None:
@@ -31,9 +41,18 @@ class Client:
             self.testloader = torch.utils.data.DataLoader(dataset=self.testset, batch_size=4,
                                                           shuffle=False, num_workers=2)
 
-        self.net = net
+        # self.model = net
+        self.model = net.to(self.device)
+
+        # Distributed GPU training if CUDA can detect more than 1 GPU
+        if with_cuda and torch.cuda.device_count() > 1:
+            print("Using %d GPUS for Model" % torch.cuda.device_count())
+            self.model = nn.DataParallel(self.model, device_ids=cuda_devices)
+
         self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = optim.SGD(self.net.parameters(), lr=0.001, momentum=0.9)
+        # self.criterion = nn.NLLLoss(ignore_index=0)
+        # self.optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=lr, betas=betas, weight_decay=weight_decay)
 
         assert(_id != None)
         self._id = _id  # TODO: assert error, global_id
@@ -62,14 +81,14 @@ class Client:
             running_loss = 0.0
             for i, data in enumerate(self.trainloader, 0):
                 # [inputs, labels]의 목록인 data로부터 입력을 받은 후;
-                inputs, labels = data
-                # inputs, labels = data[0].to(device), data[1].to(device)  # TODO: GPU
+                # inputs, labels = data
+                inputs, labels = data[0].to(self.device), data[1].to(self.device)  # TODO: GPU
 
                 # 변화도(Gradient) 매개변수를 0으로 만들고
                 self.optimizer.zero_grad()
 
                 # 순전파 + 역전파 + 최적화를 한 후
-                outputs = self.net(inputs)
+                outputs = self.model(inputs)
                 loss = self.criterion(outputs, labels)
                 loss.backward()
                 self.optimizer.step()
@@ -81,20 +100,21 @@ class Client:
                         # print('[%d, %5d] loss: %.3f' %
                         #       (epoch + 1, i + 1, running_loss / logs))
 
-                        name = "train_loss_" + str(r) + "_" + str(epoch) + "_" + str(i) + ".log"
-                        self.log(name, running_loss / logs)
+                        # name = "train_loss_" + str(r) + "_" + str(epoch) + "_" + str(i) + ".log"
+                        name = "train_loss.log"
+                        self.log(name, r, running_loss / logs)
 
                         running_loss = 0.0
 
     def save_net(self):
         name = self.PATH + "cifar_net_" + str(self._id) + ".pth"
-        torch.save(self.net.state_dict(), name)
+        torch.save(self.model.state_dict(), name)
 
     def load_net(self):
         name = self.PATH + "cifar_net_" + str(self._id) + ".pth"
         if os.path.isfile(name):
             print("Load net:", name)
-            self.net.load_state_dict(torch.load(name))
+            self.model.load_state_dict(torch.load(name))
         else:
             print("Pre-trained net does not exist")
 
@@ -106,9 +126,10 @@ class Client:
         loss = 0
         with torch.no_grad():
             for data in self.testloader:
-                images, labels = data
+                # images, labels = data
+                images, labels = data[0].to(self.device), data[1].to(self.device)  # TODO: GPU
 
-                outputs = self.net(images)
+                outputs = self.model(images)
 
                 # loss += self.criterion(outputs, labels).item()
 
@@ -125,8 +146,9 @@ class Client:
         acc = 100 * correct / total
 
         if log_flag:
-            name = "test_acc_" + str(r) + ".log"
-            self.log(name, acc)
+            # name = "test_acc_" + str(r) + ".log"
+            name = "test_acc.log"
+            self.log(name, r, acc)
 
         return acc
 
@@ -134,44 +156,47 @@ class Client:
         pass
 
     def get_weights(self):
-        # return self.net.state_dict()
-        params = self.net.named_parameters()
+        # return self.model.state_dict()
+        params = self.model.named_parameters()
         dict_params = dict(params)
 
         return dict_params
 
     def set_weights(self, params):
-        # self.net.load_state_dict(state_dict)
+        # self.model.load_state_dict(state_dict)
 
-        my_params = self.net.named_parameters()
+        my_params = self.model.named_parameters()
         dict_my_params = dict(my_params)
 
         for name, param in params.items():
             if name in dict_my_params:
                 dict_my_params[name].data.copy_(param.data)
 
-        self.net.load_state_dict(dict_my_params)
+        self.model.load_state_dict(dict_my_params)
 
     def average_weights(self):
         pass
 
     def set_average_weights(self, paramses: list, repus: list):  # TODO: norm.
-        my_params = self.net.named_parameters()
+        my_params = self.model.named_parameters()
         dict_my_params = dict(my_params)
 
         # set zeros
+        # for name in paramses[0].keys():
+        #     if name in dict_my_params:
+        #         dict_my_params[name].data.zero_()
         for name in paramses[0].keys():
             if name in dict_my_params:
-                dict_my_params[name].data.zero_()
+                dict_my_params[name].data = dict_my_params[name].data * 4 / 5
 
         for i, repu in enumerate(repus):
             params = paramses[i]
 
             for name, param in params.items():
                 if name in dict_my_params:
-                    dict_my_params[name].data.add_(repu * param.data)
+                    dict_my_params[name].data.add_(repu * param.data / 5)
 
-        self.net.load_state_dict(dict_my_params)
+        self.model.load_state_dict(dict_my_params)
 
     """DAG"""
 
@@ -186,9 +211,9 @@ class Client:
 
     """Vis"""
 
-    def log(self, name: str, data):
-        with open(self.PATH + name, "w") as f:
-            f.write("%f" % data)
+    def log(self, name: str, r: int, data):
+        with open(self.PATH + name, "a") as f:
+            f.write("%d, %f\n" % (r, data))
 
 
 if __name__ == "__main__":

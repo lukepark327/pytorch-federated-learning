@@ -9,15 +9,19 @@ import torchvision.transforms as transforms
 import os.path
 import os
 import random
+import pickle
 from copy import deepcopy
 
 from dag import Node
 from net import Net
 from client import Client
 import arguments
+from plot import draw
 
 
 if __name__ == "__main__":
+
+    os.system("rm -rf clients")
 
     """arguments"""
     args = arguments.parser()
@@ -61,20 +65,25 @@ if __name__ == "__main__":
         _id=-1)
 
     """set DAG"""
-    global_id = -1
+    global_id = 0
     nodes = []
 
     genesis = Node(
-        r=-1,
+        r=0,
         w=clients[0].get_weights(),
         _id=global_id)
     nodes.append(genesis)
     global_id += 1
 
-    """run simulator"""
-    latest_nodes = deepcopy(nodes)  # in DAG
+    """list for DAG graph"""
+    f = []
+    t = []
 
-    for r in range(rs):
+    """run simulator"""
+    # tip_nodes = deepcopy(nodes)  # in DAG
+    tip_nodes = [0]
+
+    for r in range(1, rs + 1):
         print(">>> Round %5d" % (r))
 
         # select activated clients
@@ -83,31 +92,44 @@ if __name__ == "__main__":
 
         current_nodes = []
         current_accs = []
+        old_parents = set()
 
         for a in activateds:
             client = clients[a]
 
             """reference"""
-            if len(latest_nodes) < 2:  # never be 0
-                parent = latest_nodes + latest_nodes  # TODO: parameterize
+            #print("tip_nodes: ", tip_nodes)
+            if len(tip_nodes) < 2:  # never be 0
+                parents = [nodes[tip_nodes[0]], nodes[tip_nodes[0]]]  # TODO: parameterize
                 repus = [0.5, 0.5]
+                old_parents.add(tip_nodes[0])
+                f.append(tip_nodes[0])
+                t.append(global_id)
             else:
                 # cal. edges
                 accs = []
-                for l in latest_nodes:
+                for l in tip_nodes:
+                    tip = nodes[l]
                     tmp_client.set_dataset(client.trainset, client.testset)
-                    tmp_client.set_weights(l.get_weights())
-                    accs.append(tmp_client.eval(r=-1))
+                    tmp_client.set_weights(tip.get_weights())
+                    accs.append([tip.get_id(), tmp_client.eval(r=-1)])
 
-                sorted_accs = sorted(accs)[:2]
-                idx_first, idx_second = accs.index(sorted_accs[0]), accs.index(sorted_accs[1])
+                sorted_accs = sorted(accs, key=lambda l:l[1], reverse=True)
+                #print("sorted_accs: ", sorted_accs)
+                tip1, tip2 = sorted_accs[0][0], sorted_accs[1][0]
+                #print("tips: ", tip1, tip2)
 
-                parent = [latest_nodes[idx_first], latest_nodes[idx_second]]  # TODO: numpy
-                repus = [sorted_accs[0] / sum(sorted_accs), sorted_accs[1] / sum(sorted_accs)]
+                parents = [nodes[tip1], nodes[tip2]]  # TODO: numpy
+                acc_sum = sorted_accs[0][1] + sorted_accs[1][1]
+                repus = [sorted_accs[0][1] / acc_sum, sorted_accs[1][1] / acc_sum]
+                parent_ids = [p.get_id() for p in parents]
+                old_parents.update(parent_ids)
+                f.extend(parent_ids)
+                t.extend([global_id, global_id])
 
             """train"""
             client.set_average_weights(
-                [parent[0].get_weights(), parent[1].get_weights()],
+                [parents[0].get_weights(), parents[1].get_weights()],
                 repus)
 
             client.train(r=r, epochs=1, log_flag=True)
@@ -118,17 +140,35 @@ if __name__ == "__main__":
                 r=r,
                 w=client.get_weights(),
                 _id=global_id,
-                parent=parent,
+                parent=parents,
                 edges=repus)  # TODO: sorted_accs
             nodes.append(new_node)
+
+            current_nodes.append(global_id)
+            tip_nodes.append(global_id)
+
             global_id += 1
 
-            current_nodes.append(new_node)
+        for p in old_parents:
+            #print(p)
+            try:
+                tip_nodes.remove(p)
+            except ValueError:
+                pass  # do nothing!
+        tip_nodes.extend(current_nodes)
+        tip_nodes = list(set(tip_nodes))
+
+        # write from / to
+        with open('dag.data', 'wb') as filehandle:
+            # store the data as binary data stream
+            pickle.dump({"f": f, "t": t}, filehandle)
 
         """log"""
         print(">>> activated_clients:", activateds)
-        print(">>> latest_nodes:", [d.get_id() for d in latest_nodes])
-        print(">>> current_nodes:", [d.get_id() for d in current_nodes])
+        print(">>> current_nodes:", [d for d in current_nodes])
         print(">>> current_accs:", current_accs)
+        print(">>> tip_nodes:", [t for t in tip_nodes])
 
-        latest_nodes = deepcopy(current_nodes)
+        # tip_nodes = deepcopy(current_nodes)
+
+    # draw(f, t)

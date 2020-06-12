@@ -44,7 +44,7 @@ class Net(nn.Module):
 
 if __name__ == "__main__":
     # """GPU"""
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # # CUDA 기기가 존재한다면, 아래 코드가 CUDA 장치를 출력합니다:
     # print(device)
 
@@ -142,6 +142,9 @@ if __name__ == "__main__":
             outputs = net(images)
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
+            print(predicted == labels)
+            print((predicted == labels).sum())
+            print((predicted == labels).sum().item())
             correct += (predicted == labels).sum().item()
 
     print('Accuracy of the network on the 10000 test images: %d %%' % (

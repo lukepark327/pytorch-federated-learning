@@ -5,3 +5,5 @@ __pycache__/*
 data/
 cifar_net.pth
 clients/
+IOTAtangle/
+dag.png
