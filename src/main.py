@@ -12,7 +12,7 @@ import random
 from copy import deepcopy
 
 from dag import Node
-from net import Net
+from net import Net, DenseNet
 from client import Client
 import arguments
 
@@ -51,13 +51,13 @@ if __name__ == "__main__":
         clients.append(Client(
             trainset=splited_trainset[i],
             testset=splited_testset[i],
-            net=Net(),
+            net=DenseNet(),
             _id=i))
 
     tmp_client = Client(  # tmp
         trainset=None,
         testset=splited_testset[i],
-        net=Net(),
+        net=DenseNet(),
         _id=-1)
 
     """set DAG"""
@@ -110,7 +110,7 @@ if __name__ == "__main__":
                 [parent[0].get_weights(), parent[1].get_weights()],
                 repus)
 
-            client.train(r=r, epochs=1, log_flag=True)
+            # client.train(r=r, epochs=1, log_flag=True)
             current_accs.append(client.eval(r=r, log_flag=True))
 
             """create Node"""

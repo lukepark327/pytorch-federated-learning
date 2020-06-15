@@ -10,7 +10,6 @@ import os.path
 import os
 
 from utils import recursive_mkdir
-from net import Net
 
 
 class Client:
@@ -134,14 +133,13 @@ class Client:
         pass
 
     def get_weights(self):
-        # return self.net.state_dict()
         params = self.net.named_parameters()
         dict_params = dict(params)
 
         return dict_params
 
     def set_weights(self, params):
-        # self.net.load_state_dict(state_dict)
+        model_dict = self.net.state_dict()
 
         my_params = self.net.named_parameters()
         dict_my_params = dict(my_params)
@@ -150,12 +148,15 @@ class Client:
             if name in dict_my_params:
                 dict_my_params[name].data.copy_(param.data)
 
-        self.net.load_state_dict(dict_my_params)
+        model_dict.update(dict_my_params)
+        self.net.load_state_dict(model_dict)
 
     def average_weights(self):
         pass
 
     def set_average_weights(self, paramses: list, repus: list):  # TODO: norm.
+        model_dict = self.net.state_dict()
+
         my_params = self.net.named_parameters()
         dict_my_params = dict(my_params)
 
@@ -171,7 +172,8 @@ class Client:
                 if name in dict_my_params:
                     dict_my_params[name].data.add_(repu * param.data)
 
-        self.net.load_state_dict(dict_my_params)
+        model_dict.update(dict_my_params)
+        self.net.load_state_dict(model_dict)
 
     """DAG"""
 
@@ -211,27 +213,29 @@ if __name__ == "__main__":
 
     # print(len(splited_trainset[0]), len(splited_trainset[1]), len(splited_trainset[2]))
 
+    from net import DenseNet
+
     clients = []
     for i in range(3):
         clients.append(Client(
             trainset=splited_trainset[i],
             testset=splited_testset[i],
-            net=Net(),
+            net=DenseNet(),
             _id=i
         ))
 
-    clients[0].train(r=0, epochs=1)
+    # clients[0].train(r=0, epochs=1)
     clients[1].set_weights(clients[0].get_weights())
     clients[2].set_weights(clients[0].get_weights())
 
-    clients[0].eval(r=0)
-    clients[1].eval(r=0)
-    clients[2].eval(r=0)
+    # clients[0].eval(r=0)
+    # clients[1].eval(r=0)
+    # clients[2].eval(r=0)
 
     clients[0].set_average_weights(
         [clients[1].get_weights(), clients[2].get_weights()],
         [0.9, 0.1])
 
-    clients[0].eval(r=1)
-    clients[1].eval(r=1)
-    clients[2].eval(r=1)
+    # clients[0].eval(r=1)
+    # clients[1].eval(r=1)
+    # clients[2].eval(r=1)

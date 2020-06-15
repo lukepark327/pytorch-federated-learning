@@ -22,6 +22,12 @@ import os.path
 #     plt.show()
 
 
+def DenseNet():
+    net = torch.hub.load('pytorch/vision:v0.6.0', 'densenet121', pretrained=True)
+    net.classifier = nn.Linear(in_features=1024, out_features=10, bias=True)  # diff. output features
+    return net
+
+
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
@@ -77,9 +83,7 @@ if __name__ == "__main__":
 
     """Net"""
     # net = Net()
-    net = torch.hub.load('pytorch/vision:v0.6.0', 'densenet121', pretrained=True)
-    net.classifier = nn.Linear(in_features=1024, out_features=10, bias=True)  # diff. output features
-
+    net = DenseNet()
 
     # net.to(device)  # TODO: GPU
 
