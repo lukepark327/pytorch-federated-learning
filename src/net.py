@@ -76,7 +76,11 @@ if __name__ == "__main__":
     # print(' '.join('%5s' % classes[labels[j]] for j in range(4)))
 
     """Net"""
-    net = Net()
+    # net = Net()
+    net = torch.hub.load('pytorch/vision:v0.6.0', 'densenet121', pretrained=True)
+    net.classifier = nn.Linear(in_features=1024, out_features=10, bias=True)  # diff. output features
+
+
     # net.to(device)  # TODO: GPU
 
     """load"""
@@ -111,7 +115,7 @@ if __name__ == "__main__":
 
             # 통계를 출력합니다.
             running_loss += loss.item()
-            if i % 2000 == 1999:    # print every 2000 mini-batches
+            if i % 100 == 99:    # print every 2000 mini-batches
                 print('[%d, %5d] loss: %.3f' %
                       (epoch + 1, i + 1, running_loss / 2000))
                 running_loss = 0.0
