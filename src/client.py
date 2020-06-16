@@ -53,8 +53,6 @@ class Client:
         """
         # DenseNet(growthRate=12, depth=100, reduction=0.5, bottleneck=True, nClasses=10)
         self.net = net
-        # print('>>> Number of params: {}'.format(
-        #     sum([p.data.nelement() for p in net.parameters()])))
 
         self.cuda = args.cuda
         if self.cuda:
@@ -204,7 +202,7 @@ class Client:
 
         for name, param in dict_params.items():
             dict_grad[name] = param.data
-        
+
         return dict_grad
 
     def set_weights(self, new_weights: dict):
@@ -226,10 +224,10 @@ class Client:
         for name, param in dict_params.items():
             if param.requires_grad:
                 dict_grad[name] = param.grad
-        
+
         return dict_grad
 
-    def set_grad(self, new_grads: dict):  
+    def set_grad(self, new_grads: dict):
         # TODO: Applying grad to weights via GD
         pass
 
@@ -327,27 +325,58 @@ if __name__ == "__main__":
     # TBA
     """
     net = DenseNet(growthRate=12, depth=100, reduction=0.5, bottleneck=True, nClasses=10)
+    # print('>>> Number of params: {}'.format(
+    #     sum([p.data.nelement() for p in net.parameters()])))
 
-    clients = []
-    for i in range(3):
-        clients.append(Client(
-            args=args,
-            _id=i,
-            net=net,
-            trainset=splited_trainset[i],
-            testset=splited_testset[i]))
-    # print(clients[0].net.state_dict().keys())
+    '''
+    if args.cuda:
 
-    """Test"""
-    print(clients[0].get_weights()['fc.bias'])
-    print(clients[0].get_grad()['fc.bias'])
-    
-    clients[0].train(epoch=1)
+        if torch.cuda.device_count() > 1:
+            """DataParallel
+            # TODO: setting output_device
+            # torch.cuda.device_count()
+            """
+            net = nn.DataParallel(net)
 
-    print(clients[0].get_weights()['fc.bias'])
-    print(clients[0].get_grad()['fc.bias'])
+        net = net.cuda()
 
+    if args.opt == 'sgd':
+        optimizer = optim.SGD(net.parameters(), lr=1e-1, momentum=0.9, weight_decay=1e-4)
+    elif args.opt == 'adam':
+        optimizer = optim.Adam(net.parameters(), weight_decay=1e-4)
+    elif args.opt == 'rmsprop':
+        optimizer = optim.RMSprop(net.parameters(), weight_decay=1e-4)
 
+    # load
+    if not args.no_load:
+        path_and_file = os.path.join(args.path, 'latest.pth')
+
+        if os.path.isfile(path_and_file):
+            print(">>> Load weights:", path_and_file)
+            net = torch.load(path_and_file)
+        else:
+            print(">>> No pre-trained weights")
+
+    # log files
+    trainF = open(os.path.join(args.path, 'train.csv'), 'w')
+    testF = open(os.path.join(args.path, 'test.csv'), 'w')
+
+    """train and test"""
+    for epoch in range(1, args.nEpochs + 1):
+
+        adjust_opt(args.opt, optimizer, epoch)
+
+        train(args, epoch, net, trainLoader, optimizer, show=True, logger=trainF)
+        test(args, epoch, net, testLoader, optimizer, show=True, logger=testF)
+
+        # save
+        torch.save(net, os.path.join(args.path, 'latest.pth'))
+
+    trainF.close()
+    testF.close()
+    '''
+
+    '''
     def adjust_opt(optAlg, optimizer, epoch):
         if optAlg == 'sgd':
             if epoch < 150:
@@ -361,6 +390,7 @@ if __name__ == "__main__":
 
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr
+    '''
 
     # clients[1].set_weights(clients[0].get_weights())
     # clients[2].set_weights(clients[0].get_weights())
@@ -376,3 +406,22 @@ if __name__ == "__main__":
     # # clients[0].eval(r=1)
     # # clients[1].eval(r=1)
     # # clients[2].eval(r=1)
+
+    clients = []
+    for i in range(3):
+        clients.append(Client(
+            args=args,
+            _id=i,
+            net=net,
+            trainset=splited_trainset[i],
+            testset=splited_testset[i]))
+    # print(clients[0].net.state_dict().keys())
+
+    """Test"""
+    print(clients[0].get_weights()['fc.bias'])
+    print(clients[0].get_grad()['fc.bias'])
+
+    clients[0].train(epoch=1)
+
+    print(clients[0].get_weights()['fc.bias'])
+    print(clients[0].get_grad()['fc.bias'])
