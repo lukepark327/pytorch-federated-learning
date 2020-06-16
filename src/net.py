@@ -1,174 +1,320 @@
-"""Ref.
-https://tutorials.pytorch.kr/beginner/blitz/cifar10_tutorial.html
-https://tutorials.pytorch.kr/beginner/blitz/data_parallel_tutorial.html
+"""Ref
+https://github.com/bamos/densenet.pytorch
 """
+
+import argparse
+
+import torch
+import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import torch.nn as nn
-import numpy as np
-import matplotlib.pyplot as plt
-import torch
-import torchvision
+from torch.autograd import Variable
+
+import torchvision.models as models
+import torchvision.datasets as dset
 import torchvision.transforms as transforms
-import os.path
+from torchvision.utils import save_image
+
+from torch.utils.data import DataLoader
+
+import os
+import sys
+import math
+import shutil
+
+import setproctitle
 
 
-# """show images"""
-# # 이미지를 보여주기 위한 함수
-# def imshow(img):
-#     img = img / 2 + 0.5     # unnormalize
-#     npimg = img.numpy()
-#     plt.imshow(np.transpose(npimg, (1, 2, 0)))
-#     plt.show()
-
-
-def DenseNet():
-    net = torch.hub.load('pytorch/vision:v0.6.0', 'densenet121', pretrained=True)
-    net.classifier = nn.Linear(in_features=1024, out_features=10, bias=True)  # diff. output features
-    return net
-
-
-class Net(nn.Module):
-    def __init__(self):
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+class Bottleneck(nn.Module):
+    def __init__(self, nChannels, growthRate):
+        super(Bottleneck, self).__init__()
+        interChannels = 4 * growthRate
+        self.bn1 = nn.BatchNorm2d(nChannels)
+        self.conv1 = nn.Conv2d(nChannels, interChannels, kernel_size=1,
+                               bias=False)
+        self.bn2 = nn.BatchNorm2d(interChannels)
+        self.conv2 = nn.Conv2d(interChannels, growthRate, kernel_size=3,
+                               padding=1, bias=False)
 
     def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 5 * 5)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+        out = self.conv1(F.relu(self.bn1(x)))
+        out = self.conv2(F.relu(self.bn2(out)))
+        out = torch.cat((x, out), 1)
+        return out
 
 
-if __name__ == "__main__":
-    # """GPU"""
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # # CUDA 기기가 존재한다면, 아래 코드가 CUDA 장치를 출력합니다:
-    # print(device)
+class SingleLayer(nn.Module):
+    def __init__(self, nChannels, growthRate):
+        super(SingleLayer, self).__init__()
+        self.bn1 = nn.BatchNorm2d(nChannels)
+        self.conv1 = nn.Conv2d(nChannels, growthRate, kernel_size=3,
+                               padding=1, bias=False)
 
-    """Preprocess"""
-    transform = transforms.Compose(
-        [transforms.ToTensor(),
-         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    def forward(self, x):
+        out = self.conv1(F.relu(self.bn1(x)))
+        out = torch.cat((x, out), 1)
+        return out
 
-    trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                            download=True, transform=transform)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=4,
-                                              shuffle=True, num_workers=2)
 
-    testset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                           download=True, transform=transform)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=4,
-                                             shuffle=False, num_workers=2)
+class Transition(nn.Module):
+    def __init__(self, nChannels, nOutChannels):
+        super(Transition, self).__init__()
+        self.bn1 = nn.BatchNorm2d(nChannels)
+        self.conv1 = nn.Conv2d(nChannels, nOutChannels, kernel_size=1,
+                               bias=False)
 
-    classes = ('plane', 'car', 'bird', 'cat',
-               'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+    def forward(self, x):
+        out = self.conv1(F.relu(self.bn1(x)))
+        out = F.avg_pool2d(out, 2)
+        return out
 
-    # # 학습용 이미지를 무작위로 가져오기
-    # dataiter = iter(trainloader)
-    # images, labels = dataiter.next()
 
-    # # 이미지 보여주기
-    # imshow(torchvision.utils.make_grid(images))
-    # # 정답(label) 출력
-    # print(' '.join('%5s' % classes[labels[j]] for j in range(4)))
+class DenseNet(nn.Module):
+    def __init__(self, growthRate, depth, reduction, nClasses, bottleneck):
+        super(DenseNet, self).__init__()
 
-    """Net"""
-    # net = Net()
-    net = DenseNet()
+        nDenseBlocks = (depth - 4) // 3
+        if bottleneck:
+            nDenseBlocks //= 2
 
-    # net.to(device)  # TODO: GPU
+        nChannels = 2 * growthRate
+        self.conv1 = nn.Conv2d(3, nChannels, kernel_size=3, padding=1,
+                               bias=False)
+        self.dense1 = self._make_dense(nChannels, growthRate, nDenseBlocks, bottleneck)
+        nChannels += nDenseBlocks * growthRate
+        nOutChannels = int(math.floor(nChannels * reduction))
+        self.trans1 = Transition(nChannels, nOutChannels)
 
-    """load"""
-    PATH = './cifar_net.pth'
-    if os.path.isfile(PATH):
-        print("Load net:", PATH)
-        net.load_state_dict(torch.load(PATH))
-    else:
-        print("Pre-trained net does not exist")
+        nChannels = nOutChannels
+        self.dense2 = self._make_dense(nChannels, growthRate, nDenseBlocks, bottleneck)
+        nChannels += nDenseBlocks * growthRate
+        nOutChannels = int(math.floor(nChannels * reduction))
+        self.trans2 = Transition(nChannels, nOutChannels)
 
-    """loss and optimizer"""
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+        nChannels = nOutChannels
+        self.dense3 = self._make_dense(nChannels, growthRate, nDenseBlocks, bottleneck)
+        nChannels += nDenseBlocks * growthRate
 
-    """training"""
-    for epoch in range(1):   # 데이터셋을 수차례 반복합니다.
+        self.bn1 = nn.BatchNorm2d(nChannels)
+        self.fc = nn.Linear(nChannels, nClasses)
 
-        running_loss = 0.0
-        for i, data in enumerate(trainloader, 0):
-            # [inputs, labels]의 목록인 data로부터 입력을 받은 후;
-            inputs, labels = data
-            # inputs, labels = data[0].to(device), data[1].to(device)  # TODO: GPU
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+            elif isinstance(m, nn.Linear):
+                m.bias.data.zero_()
 
-            # 변화도(Gradient) 매개변수를 0으로 만들고
-            optimizer.zero_grad()
+    def _make_dense(self, nChannels, growthRate, nDenseBlocks, bottleneck):
+        layers = []
+        for i in range(int(nDenseBlocks)):
+            if bottleneck:
+                layers.append(Bottleneck(nChannels, growthRate))
+            else:
+                layers.append(SingleLayer(nChannels, growthRate))
+            nChannels += growthRate
+        return nn.Sequential(*layers)
 
-            # 순전파 + 역전파 + 최적화를 한 후
-            outputs = net(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+    def forward(self, x):
+        out = self.conv1(x)
+        out = self.trans1(self.dense1(out))
+        out = self.trans2(self.dense2(out))
+        out = self.dense3(out)
+        out = torch.squeeze(F.avg_pool2d(F.relu(self.bn1(out)), 8))
+        out = F.log_softmax(self.fc(out), dim=1)
+        return out
 
-            # 통계를 출력합니다.
-            running_loss += loss.item()
-            if i % 100 == 99:    # print every 2000 mini-batches
-                print('[%d, %5d] loss: %.3f' %
-                      (epoch + 1, i + 1, running_loss / 2000))
-                running_loss = 0.0
 
-    print('Finished Training')
+def train(args, epoch, net, trainLoader, optimizer, logger=None, show=False):
+    if (not show) and (logger is None):
+        return
 
-    """model save"""
-    torch.save(net.state_dict(), PATH)
+    net.train()  # tells net to do training
 
-    """eval"""
-    # dataiter = iter(testloader)
-    # images, labels = dataiter.next()
+    nProcessed = 0
+    nTrain = len(trainLoader.dataset)
 
-    # # 이미지를 출력합니다.
-    # imshow(torchvision.utils.make_grid(images))
-    # print('GroundTruth: ', ' '.join('%5s' % classes[labels[j]] for j in range(4)))
+    for batch_idx, (data, target) in enumerate(trainLoader):
+        if args.cuda:
+            data, target = data.cuda(), target.cuda()
 
-    # outputs = net(images)
-    # _, predicted = torch.max(outputs, 1)
-    # print('Predicted: ', ' '.join('%5s' % classes[predicted[j]]
-    #                             for j in range(4)))
+        data, target = Variable(data), Variable(target)
+        optimizer.zero_grad()
+        output = net(data)
+        loss = F.nll_loss(output, target)
+        loss.backward()
+        optimizer.step()
 
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for data in testloader:
-            images, labels = data
-            outputs = net(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+        nProcessed += len(data)
+        pred = output.data.max(1)[1]  # get the index of the max log-probability
+        incorrect = pred.ne(target.data).cpu().sum()
+        err = 100. * incorrect / len(data)
+        partialEpoch = epoch + batch_idx / len(trainLoader) - 1
 
-    print('Accuracy of the network on the 10000 test images: %d %%' % (
-        100 * correct / total))
+        if show:
+            print('Train Epoch: {:.2f} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tError: {:.6f}'.format(
+                partialEpoch, nProcessed, nTrain, 100. * batch_idx / len(trainLoader),
+                loss.item(), err))
 
-    # # per class
-    # class_correct = list(0. for i in range(10))
-    # class_total = list(0. for i in range(10))
-    # with torch.no_grad():
-    #     for data in testloader:
-    #         images, labels = data
-    #         outputs = net(images)
-    #         _, predicted = torch.max(outputs, 1)
-    #         c = (predicted == labels).squeeze()
-    #         for i in range(4):
-    #             label = labels[i]
-    #             class_correct[label] += c[i].item()
-    #             class_total[label] += 1
+        if logger is not None:
+            logger.write('{},{},{}\n'.format(partialEpoch, loss.item(), err))
+            logger.flush()
 
-    # for i in range(10):
-    #     print('Accuracy of %5s : %2d %%' % (
-    #         classes[i], 100 * class_correct[i] / class_total[i]))
+
+def test(args, epoch, net, testLoader, optimizer, logger=None, show=True):
+    if (not show) and (logger is None):
+        return
+
+    net.eval()  # tells net to do evaluating
+
+    test_loss = 0
+    incorrect = 0
+
+    for data, target in testLoader:
+        if args.cuda:
+            data, target = data.cuda(), target.cuda()
+
+        with torch.no_grad():
+            # data, target = Variable(data), Variable(target)
+            output = net(data)
+            test_loss += F.nll_loss(output, target).item()
+            pred = output.data.max(1)[1]  # get the index of the max log-probability
+            incorrect += pred.ne(target.data).cpu().sum()
+
+    test_loss = test_loss
+    test_loss /= len(testLoader)  # loss function already averages over batch size
+    nTotal = len(testLoader.dataset)
+    err = 100. * incorrect / nTotal
+
+    if show:
+        print('\nTest set: Average loss: {:.4f}, Error: {}/{} ({:.0f}%)\n'.format(
+            test_loss, incorrect, nTotal, err))
+
+    if logger is not None:
+        logger.write('{},{},{}\n'.format(epoch, test_loss, err))
+        logger.flush()
+
+
+def adjust_opt(optAlg, optimizer, epoch):
+    if optAlg == 'sgd':
+        if epoch < 150:
+            lr = 1e-1
+        elif epoch == 150:
+            lr = 1e-2
+        elif epoch == 225:
+            lr = 1e-3
+        else:
+            return
+
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = lr
+
+
+if __name__ == '__main__':
+    """argparse"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--batchSz', type=int, default=128)
+    parser.add_argument('--nEpochs', type=int, default=300)
+    parser.add_argument('--no-cuda', action='store_true')
+    parser.add_argument('--path')
+    parser.add_argument('--no-load', action='store_true')
+    parser.add_argument('--seed', type=int, default=1)
+    parser.add_argument('--opt', type=str, default='sgd',
+                        choices=('sgd', 'adam', 'rmsprop'))
+    args = parser.parse_args()
+
+    args.cuda = not args.no_cuda and torch.cuda.is_available()
+    args.path = args.path or 'data/base'
+    setproctitle.setproctitle(args.path)
+
+    torch.manual_seed(args.seed)
+    if args.cuda:
+        torch.cuda.manual_seed(args.seed)
+
+    # if os.path.exists(args.path):
+    #     shutil.rmtree(args.path)
+    os.makedirs(args.path, exist_ok=True)
+
+    """normalization
+    # TODO: get Mean and Std
+    """
+    normMean = [0.49139968, 0.48215827, 0.44653124]
+    normStd = [0.24703233, 0.24348505, 0.26158768]
+    normTransform = transforms.Normalize(normMean, normStd)
+
+    trainTransform = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        normTransform
+    ])
+    testTransform = transforms.Compose([
+        transforms.ToTensor(),
+        normTransform
+    ])
+
+    """data
+    # TODO: set num_workers
+    """
+    kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
+
+    trainLoader = DataLoader(
+        dset.CIFAR10(root='cifar', train=True, download=True, transform=trainTransform),
+        batch_size=args.batchSz, shuffle=True, **kwargs)
+    testLoader = DataLoader(
+        dset.CIFAR10(root='cifar', train=False, download=True, transform=testTransform),
+        batch_size=args.batchSz, shuffle=False, **kwargs)
+
+    """net"""
+    net = DenseNet(growthRate=12, depth=100, reduction=0.5, bottleneck=True, nClasses=10)
+    print('>>> Number of params: {}'.format(
+        sum([p.data.nelement() for p in net.parameters()])))
+
+    if args.cuda:
+
+        if torch.cuda.device_count() > 1:
+            """DataParallel
+            # TODO: setting output_device
+            # torch.cuda.device_count()
+            """
+            net = nn.DataParallel(net)
+
+        net = net.cuda()
+
+    if args.opt == 'sgd':
+        optimizer = optim.SGD(net.parameters(), lr=1e-1, momentum=0.9, weight_decay=1e-4)
+    elif args.opt == 'adam':
+        optimizer = optim.Adam(net.parameters(), weight_decay=1e-4)
+    elif args.opt == 'rmsprop':
+        optimizer = optim.RMSprop(net.parameters(), weight_decay=1e-4)
+
+    # load
+    if not args.no_load:
+        path_and_file = os.path.join(args.path, 'latest.pth')
+
+        if os.path.isfile(path_and_file):
+            print(">>> Load weights:", path_and_file)
+            net = torch.load(path_and_file)
+        else:
+            print(">>> No pre-trained weights")
+
+    # log files
+    trainF = open(os.path.join(args.path, 'train.csv'), 'w')
+    testF = open(os.path.join(args.path, 'test.csv'), 'w')
+
+    """train and test"""
+    for epoch in range(1, args.nEpochs + 1):
+
+        adjust_opt(args.opt, optimizer, epoch)
+
+        train(args, epoch, net, trainLoader, optimizer, show=True, logger=trainF)
+        test(args, epoch, net, testLoader, optimizer, show=True, logger=testF)
+
+        # save
+        torch.save(net, os.path.join(args.path, 'latest.pth'))
+
+    trainF.close()
+    testF.close()
