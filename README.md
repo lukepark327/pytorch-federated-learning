@@ -1,6 +1,16 @@
 # DDL-simulator
 Decentralized Deep Learning Simulator.
 
+## Baseline
+```
+python src/net.py
+```
+
+## Run
+```
+python src/main.py
+```
+
 <!--
 Keywords:
 * Federated Learning

@@ -3,5 +3,6 @@
 .python-version
 */__pycache__/*
 data/
-cifar_net.pth
+cifar/
 clients/
+*.pth
