@@ -2,8 +2,6 @@
 https://github.com/bamos/densenet.pytorch
 """
 
-import argparse
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -17,12 +15,7 @@ from torchvision.utils import save_image
 
 from torch.utils.data import DataLoader
 
-import os
-import sys
 import math
-import shutil
-
-import setproctitle
 
 
 class Bottleneck(nn.Module):
@@ -214,6 +207,11 @@ def adjust_opt(optAlg, optimizer, epoch):
 
 
 if __name__ == '__main__':
+    import argparse
+    import setproctitle
+    import os
+    import shutil
+
     """argparse"""
     parser = argparse.ArgumentParser()
     parser.add_argument('--batchSz', type=int, default=128)
@@ -240,6 +238,7 @@ if __name__ == '__main__':
 
     """normalization
     # TODO: get Mean and Std
+    # Ref: https://github.com/bamos/densenet.pytorch
     """
     normMean = [0.49139968, 0.48215827, 0.44653124]
     normStd = [0.24703233, 0.24348505, 0.26158768]
