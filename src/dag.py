@@ -4,24 +4,29 @@ DAG (Directed Acyclic Graph)
 
 
 class Node:
+    _id = 0
+
     def __init__(self,
-                 r,  # TODO: case None
-                 w,  # TODO: gradient
-                 _id=None,  # TODO: case None
-                 parent: list = [],
-                 edges: list = []):
+                 weights,
+                 #  parent: list = [],
+                 #  edges: list = [],
+                 _id=None):
 
-        assert(_id != None)
-        self._id = _id
+        # id
+        if _id != None:
+            self._id = _id
+        else:
+            self._id = Node._id
+            Node._id += 1
 
-        self.r = r
-        self.w = w
+        # TODO: rounds
 
-        self.parent = parent
-        self.edges = edges
+        self.weights = weights
+        # self.parent = parent
+        # self.edges = edges
 
     def get_id(self):
         return self._id
 
     def get_weights(self):
-        return self.w
+        return self.weights

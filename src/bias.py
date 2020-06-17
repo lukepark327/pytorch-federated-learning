@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     classes = ('plane', 'car', 'bird', 'cat', 'deer',
                'dog', 'frog', 'horse', 'ship', 'truck')
-    
+
     """biased split
     # TODO: distriting each dataset size biased
     # collections.Counter(pareto(np.arange(ns), 0, size=len(trainset)))
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     #         log=True, annot=False,
     #         xlabel="classes", ylabel="nodes", title="dataset dist. (log)",
     #         save=False, show=False)
-    
+
     print(dist_map)
     naive_dist = [dist_map[:, i].sum() for i in range(cs)]
     refined_dist = [naive_dist]

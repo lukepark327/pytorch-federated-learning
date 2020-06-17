@@ -4,12 +4,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-import torchvision.models as models
-import torchvision.datasets as dset
-import torchvision.transforms as transforms
-from torchvision.utils import save_image
-
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 
 import os
 import numpy as np
@@ -44,17 +39,20 @@ class Client:
         # TODO: set num_workers
         # TODO: per-client-normalization (not global)
         """
-        kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
+        self.cuda = args.cuda
+        self.batch_size = args.batchSz
+
+        kwargs = {'num_workers': 1, 'pin_memory': True} if self.cuda else {}
         self.trainset = trainset
         if self.trainset is not None:
             # dset.CIFAR10(root='cifar', train=True, download=True, transform=trainTransform)
             self.trainLoader = DataLoader(self.trainset,
-                                          batch_size=args.batchSz, shuffle=True, **kwargs)
+                                          batch_size=self.batch_size, shuffle=True, **kwargs)
         self.testset = testset
         if self.testset is not None:
             # dset.CIFAR10(root='cifar', train=False, download=True, transform=testTransform)
             self.testLoader = DataLoader(self.testset,
-                                         batch_size=args.batchSz, shuffle=False, **kwargs)
+                                         batch_size=self.batch_size, shuffle=False, **kwargs)
 
         """net
         # TBA
@@ -62,7 +60,6 @@ class Client:
         # DenseNet(growthRate=12, depth=100, reduction=0.5, bottleneck=True, nClasses=10)
         self.net = net
 
-        self.cuda = args.cuda
         if self.cuda:
             if torch.cuda.device_count() > 1:
                 """DataParallel
@@ -101,24 +98,25 @@ class Client:
         # else:
             # print(">>> No pre-trained weights")
 
-    def set_dataset(self, trainset=None, testset=None):
+    def set_dataset(self, trainset=None, testset=None, batch_size=None):
         assert((trainset or testset) != None)
+        batch_size = self.batch_size or batch_size
 
         # TODO: set num_workers
         # TODO: per-client-normalization (not global)
-        kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
+        kwargs = {'num_workers': 1, 'pin_memory': True} if self.cuda else {}
         self.trainset = trainset
         if self.trainset is not None:
             # dset.CIFAR10(root='cifar', train=True, download=True, transform=trainTransform)
-            self.trainloader = DataLoader(self.trainset,
-                                          batch_size=args.batchSz, shuffle=True, **kwargs)
+            self.trainLoader = DataLoader(self.trainset,
+                                          batch_size=batch_size, shuffle=True, **kwargs)
         self.testset = testset
         if self.testset is not None:
             # dset.CIFAR10(root='cifar', train=False, download=True, transform=testTransform),
-            self.testloader = DataLoader(self.testset,
-                                         batch_size=args.batchSz, shuffle=False, **kwargs)
+            self.testLoader = DataLoader(self.testset,
+                                         batch_size=batch_size, shuffle=False, **kwargs)
 
-    def train(self, epoch, show=True):
+    def train(self, epoch, show=True, log=True):
         # assert((not show) or (self.trainF is None))
 
         self.net.train()
@@ -149,15 +147,15 @@ class Client:
                     partialEpoch, nProcessed, nTrain, 100. * batch_idx / len(self.trainLoader),
                     loss.item(), err))
 
-            if self.trainF is not None:
+            if (self.trainF is not None) and log:
                 self.trainF.write('{},{},{}\n'.format(
                     partialEpoch, loss.item(), err))
                 self.trainF.flush()
 
-    def test(self, epoch, show=True):
-        assert((not show) or (self.testF is None))
+    def test(self, epoch, show=True, log=True):
+        # assert((not show) or (self.testF is None))
 
-        net.eval()  # tells net to do evaluating
+        self.net.eval()  # tells net to do evaluating
 
         test_loss = 0
         incorrect = 0
@@ -183,10 +181,12 @@ class Client:
             print('\nTest set: Average loss: {:.4f}, Error: {}/{} ({:.0f}%)\n'.format(
                 test_loss, incorrect, nTotal, err))
 
-        if self.testF is not None:
+        if (self.testF is not None) and log:
             self.testF.write('{},{},{}\n'.format(
                 epoch, test_loss, err))
             self.testF.flush()
+
+        return err.item()
 
     def adjust_opt(self, epoch):
         if self.opt == 'sgd':
@@ -284,6 +284,11 @@ class Client:
 
 if __name__ == "__main__":
     import argparse
+
+    import torchvision.datasets as dset
+    import torchvision.transforms as transforms
+    from torch.utils.data import random_split
+
     from net import DenseNet
 
     """argparse"""
@@ -305,7 +310,7 @@ if __name__ == "__main__":
         torch.cuda.manual_seed(args.seed)
 
     """Data
-    # TODO: get Mean and Std
+    # TODO: get Mean and Std per client
     # Ref: https://github.com/bamos/densenet.pytorch
     """
     normMean = [0.49139968, 0.48215827, 0.44653124]
@@ -335,8 +340,8 @@ if __name__ == "__main__":
     """
     def _dense_net():
         return DenseNet(growthRate=12, depth=100, reduction=0.5, bottleneck=True, nClasses=10)
-    # print('>>> Number of params: {}'.format(
-    #     sum([p.data.nelement() for p in net.parameters()])))
+        # print('>>> Number of params: {}'.format(
+        #     sum([p.data.nelement() for p in net.parameters()])))
 
     clients = []
     for i in range(3):
