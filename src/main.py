@@ -88,7 +88,7 @@ if __name__ == "__main__":
         _id=-1)
 
     """Set DAG
-    # TBA
+    # TODO: DAG connection
     """
     genesis = Node(
         weights=tmp_client.get_weights(),
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     nodes.append(genesis)
 
     """Run simulator
-    # TBA
+    # TODO: logging time (train, test)
     """
     latest_nodes = deepcopy(nodes)  # in DAG
 

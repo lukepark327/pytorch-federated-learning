@@ -1,8 +1,11 @@
 .DS_Store
+
 .vscode/
 .python-version
 */__pycache__/*
+
 data/
 cifar/
 clients/
+
 *.pth
