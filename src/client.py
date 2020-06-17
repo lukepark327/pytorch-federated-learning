@@ -1,7 +1,3 @@
-"""Ref
-# Ref: https://github.com/bamos/densenet.pytorch
-"""
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -20,23 +16,35 @@ import numpy as np
 
 
 class Client:
+    _id = 0
+
     def __init__(self,
                  args,
-                 _id,
-                 net,
-                 trainset=None, testset=None):
+                 net, trainset=None, testset=None,
+                 _id=None, log=False):
 
-        assert(_id != None)
-        self._id = _id
+        # id
+        if _id != None:
+            self._id = _id
+        else:
+            self._id = Client._id
+            Client._id += 1
 
         self.path = args.path or ('clients/' + str(self._id))
         os.makedirs(self.path, exist_ok=True)
+
+        # logger
+        if log:
+            self.trainF = open(os.path.join(self.path, 'train.csv'), 'w')
+            self.testF = open(os.path.join(self.path, 'test.csv'), 'w')
+        else:
+            self.trainF, self.testF = None, None
 
         """data
         # TODO: set num_workers
         # TODO: per-client-normalization (not global)
         """
-        kwargs = {'num_workers': 4, 'pin_memory': True} if args.cuda else {}
+        kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
         self.trainset = trainset
         if self.trainset is not None:
             # dset.CIFAR10(root='cifar', train=True, download=True, transform=trainTransform)
@@ -65,12 +73,13 @@ class Client:
             # else:  # one GPU
             self.net = self.net.cuda()  # use cuda
 
-        if args.opt == 'sgd':
-            self.optimizer = optim.SGD(net.parameters(), lr=1e-1, momentum=0.9, weight_decay=1e-4)
-        elif args.opt == 'adam':
-            self.optimizer = optim.Adam(net.parameters(), weight_decay=1e-4)
-        elif args.opt == 'rmsprop':
-            self.optimizer = optim.RMSprop(net.parameters(), weight_decay=1e-4)
+        self.opt = args.opt
+        if self.opt == 'sgd':
+            self.optimizer = optim.SGD(net.parameters(), lr=1e-1, momentum=0.9)  # , weight_decay=1e-4)
+        elif self.opt == 'adam':
+            self.optimizer = optim.Adam(net.parameters())  # , weight_decay=1e-4)
+        elif self.opt == 'rmsprop':
+            self.optimizer = optim.RMSprop(net.parameters())  # , weight_decay=1e-4)
 
     """ML
     # TBA
@@ -97,7 +106,7 @@ class Client:
 
         # TODO: set num_workers
         # TODO: per-client-normalization (not global)
-        kwargs = {'num_workers': 4, 'pin_memory': True} if args.cuda else {}
+        kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
         self.trainset = trainset
         if self.trainset is not None:
             # dset.CIFAR10(root='cifar', train=True, download=True, transform=trainTransform)
@@ -109,11 +118,8 @@ class Client:
             self.testloader = DataLoader(self.testset,
                                          batch_size=args.batchSz, shuffle=False, **kwargs)
 
-    def train(self,
-              epoch,
-              show=True, logger=None):
-
-        assert((not show) or (logger is None))
+    def train(self, epoch, show=True):
+        # assert((not show) or (self.trainF is None))
 
         self.net.train()
 
@@ -143,18 +149,13 @@ class Client:
                     partialEpoch, nProcessed, nTrain, 100. * batch_idx / len(self.trainLoader),
                     loss.item(), err))
 
-            if logger is not None:
-                logger.write('{},{},{}\n'.format(
+            if self.trainF is not None:
+                self.trainF.write('{},{},{}\n'.format(
                     partialEpoch, loss.item(), err))
-                logger.flush()
+                self.trainF.flush()
 
-            # break  # TODO: TMP
-
-    def test(self,
-             epoch,
-             show=True, logger=None):
-
-        assert((not show) or (logger is None))
+    def test(self, epoch, show=True):
+        assert((not show) or (self.testF is None))
 
         net.eval()  # tells net to do evaluating
 
@@ -182,10 +183,24 @@ class Client:
             print('\nTest set: Average loss: {:.4f}, Error: {}/{} ({:.0f}%)\n'.format(
                 test_loss, incorrect, nTotal, err))
 
-        if logger is not None:
-            logger.write('{},{},{}\n'.format(
+        if self.testF is not None:
+            self.testF.write('{},{},{}\n'.format(
                 epoch, test_loss, err))
-            logger.flush()
+            self.testF.flush()
+
+    def adjust_opt(self, epoch):
+        if self.opt == 'sgd':
+            if epoch < 150:
+                lr = 1e-1
+            elif epoch == 150:
+                lr = 1e-2
+            elif epoch == 225:
+                lr = 1e-3
+            else:
+                return
+
+            for param_group in self.optimizer.param_groups:
+                param_group['lr'] = lr
 
     def _get_params(self):
         params = self.net.named_parameters()
@@ -198,17 +213,16 @@ class Client:
 
     def get_weights(self):
         dict_params = self._get_params()
-        dict_grad = dict()
+        dict_weights = dict()
 
         for name, param in dict_params.items():
-            dict_grad[name] = param.data
+            dict_weights[name] = param.data
 
-        return dict_grad
+        return dict_weights
 
     def set_weights(self, new_weights: dict):
         net_state_dict = self.net.state_dict()
-        params = self.net.named_parameters()
-        dict_params = dict(params)
+        dict_params = self._get_params()
 
         for name, new_weight in new_weights.items():
             if name in dict_params:
@@ -217,43 +231,38 @@ class Client:
         net_state_dict.update(dict_params)
         self.net.load_state_dict(net_state_dict)
 
-    def get_grad(self):
-        dict_params = self._get_params()
-        dict_grad = dict()
+    def get_average_weights(self, weightses: list, repus: list):
+        dict_avg_weights = dict()
 
-        for name, param in dict_params.items():
-            if param.requires_grad:
-                dict_grad[name] = param.grad
+        for i, repu in enumerate(repus):
+            weights = weightses[i]
 
-        return dict_grad
+            for name, weight in weights.items():
+                if name not in dict_avg_weights:
+                    dict_avg_weights[name] = torch.zeros_like(weight)
 
-    def set_grad(self, new_grads: dict):
-        # TODO: Applying grad to weights via GD
-        pass
+                dict_avg_weights[name].data.add_(repu * weight.data)
 
-    # def average_weights(self):
-    #     pass
+        return dict_avg_weights
 
-    # def set_average_weights(self, paramses: list, repus: list):  # TODO: norm.
-    #     model_dict = self.net.state_dict()
+    def set_average_weights(self, weightses: list, repus: list):  # TODO: norm.
+        self.set_weights(self.get_average_weights(weightses, repus))
 
-    #     my_params = self.net.named_parameters()
-    #     dict_my_params = dict(my_params)
+    # # TODO: gradient. Is it really needeed?
+    # # See https://github.com/AshwinRJ/Federated-Learning-PyTorch
 
-    #     # set zeros
-    #     for name in paramses[0].keys():
-    #         if name in dict_my_params:
-    #             dict_my_params[name].data.zero_()
+    # def _get_grad(self):
+    #     dict_params = self._get_params()
+    #     dict_grad = dict()
 
-    #     for i, repu in enumerate(repus):
-    #         params = paramses[i]
+    #     for name, param in dict_params.items():
+    #         if param.requires_grad:
+    #             dict_grad[name] = param.grad
 
-    #         for name, param in params.items():
-    #             if name in dict_my_params:
-    #                 dict_my_params[name].data.add_(repu * param.data)
+    #     return dict_grad
 
-    #     model_dict.update(dict_my_params)
-    #     self.net.load_state_dict(model_dict)
+    # def _set_grad(self, new_grads: dict):
+    #     pass  # TODO: Applying grad to weights via GD
 
     """DAG
     # TODO
@@ -290,7 +299,7 @@ if __name__ == "__main__":
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
 
-    """ML"""
+    # set seed
     torch.manual_seed(args.seed)
     if args.cuda:
         torch.cuda.manual_seed(args.seed)
@@ -324,104 +333,51 @@ if __name__ == "__main__":
     """FL
     # TBA
     """
-    net = DenseNet(growthRate=12, depth=100, reduction=0.5, bottleneck=True, nClasses=10)
+    def _dense_net():
+        return DenseNet(growthRate=12, depth=100, reduction=0.5, bottleneck=True, nClasses=10)
     # print('>>> Number of params: {}'.format(
     #     sum([p.data.nelement() for p in net.parameters()])))
-
-    '''
-    if args.cuda:
-
-        if torch.cuda.device_count() > 1:
-            """DataParallel
-            # TODO: setting output_device
-            # torch.cuda.device_count()
-            """
-            net = nn.DataParallel(net)
-
-        net = net.cuda()
-
-    if args.opt == 'sgd':
-        optimizer = optim.SGD(net.parameters(), lr=1e-1, momentum=0.9, weight_decay=1e-4)
-    elif args.opt == 'adam':
-        optimizer = optim.Adam(net.parameters(), weight_decay=1e-4)
-    elif args.opt == 'rmsprop':
-        optimizer = optim.RMSprop(net.parameters(), weight_decay=1e-4)
-
-    # load
-    if not args.no_load:
-        path_and_file = os.path.join(args.path, 'latest.pth')
-
-        if os.path.isfile(path_and_file):
-            print(">>> Load weights:", path_and_file)
-            net = torch.load(path_and_file)
-        else:
-            print(">>> No pre-trained weights")
-
-    # log files
-    trainF = open(os.path.join(args.path, 'train.csv'), 'w')
-    testF = open(os.path.join(args.path, 'test.csv'), 'w')
-
-    """train and test"""
-    for epoch in range(1, args.nEpochs + 1):
-
-        adjust_opt(args.opt, optimizer, epoch)
-
-        train(args, epoch, net, trainLoader, optimizer, show=True, logger=trainF)
-        test(args, epoch, net, testLoader, optimizer, show=True, logger=testF)
-
-        # save
-        torch.save(net, os.path.join(args.path, 'latest.pth'))
-
-    trainF.close()
-    testF.close()
-    '''
-
-    '''
-    def adjust_opt(optAlg, optimizer, epoch):
-        if optAlg == 'sgd':
-            if epoch < 150:
-                lr = 1e-1
-            elif epoch == 150:
-                lr = 1e-2
-            elif epoch == 225:
-                lr = 1e-3
-            else:
-                return
-
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr
-    '''
-
-    # clients[1].set_weights(clients[0].get_weights())
-    # clients[2].set_weights(clients[0].get_weights())
-
-    # # clients[0].eval(r=0)
-    # # clients[1].eval(r=0)
-    # # clients[2].eval(r=0)
-
-    # clients[0].set_average_weights(
-    #     [clients[1].get_weights(), clients[2].get_weights()],
-    #     [0.9, 0.1])
-
-    # # clients[0].eval(r=1)
-    # # clients[1].eval(r=1)
-    # # clients[2].eval(r=1)
 
     clients = []
     for i in range(3):
         clients.append(Client(
             args=args,
-            _id=i,
-            net=net,
+            net=_dense_net(),
             trainset=splited_trainset[i],
-            testset=splited_testset[i]))
-    # print(clients[0].net.state_dict().keys())
+            testset=splited_testset[i],
+            log=True))
 
-    """Test"""
-    print(clients[0].get_weights()['fc.bias'])
-    print(clients[0].get_grad()['fc.bias'])
+    # Test
+    wanna_see = 'module.fc.weight'
 
-    clients[0].train(epoch=1)
+    print('Init')
+    print(clients[0].get_weights()[wanna_see].data[0][0])
+    print(clients[1].get_weights()[wanna_see].data[0][0])
+    print(clients[2].get_weights()[wanna_see].data[0][0])
 
-    print(clients[0].get_weights()['fc.bias'])
-    print(clients[0].get_grad()['fc.bias'])
+    clients[1].set_weights(clients[0].get_weights())
+    clients[2].set_weights(clients[0].get_weights())
+
+    print('Set')
+    print(clients[0].get_weights()[wanna_see].data[0][0])
+    print(clients[1].get_weights()[wanna_see].data[0][0])
+    print(clients[2].get_weights()[wanna_see].data[0][0])
+
+    # train
+    clients[1].train(epoch=1, show=False)
+    clients[2].train(epoch=1, show=False)
+
+    print('After training')
+    print(clients[0].get_weights()[wanna_see].data[0][0])
+    print(clients[1].get_weights()[wanna_see].data[0][0])
+    print(clients[2].get_weights()[wanna_see].data[0][0])
+
+    # avg
+    clients[0].set_average_weights(
+        [clients[1].get_weights(), clients[2].get_weights()],
+        [0.9, 0.1])
+
+    print('After averaging')
+    print(clients[0].get_weights()[wanna_see].data[0][0])
+    print(clients[1].get_weights()[wanna_see].data[0][0])
+    print(clients[2].get_weights()[wanna_see].data[0][0])

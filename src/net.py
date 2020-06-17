@@ -267,7 +267,9 @@ if __name__ == '__main__':
         dset.CIFAR10(root='cifar', train=False, download=True, transform=testTransform),
         batch_size=args.batchSz, shuffle=False, **kwargs)
 
-    """net"""
+    """net
+    # TODO: remove batch normalization (and residual connection ?)
+    """
     net = DenseNet(growthRate=12, depth=100, reduction=0.5, bottleneck=True, nClasses=10)
     print('>>> Number of params: {}'.format(
         sum([p.data.nelement() for p in net.parameters()])))
