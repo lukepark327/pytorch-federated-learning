@@ -1,3 +1,9 @@
+"""
+# Inherit Client.py
+# TODO: total data dist.
+# TODO: data dist. per node
+"""
+
 import torch.optim as optim
 import torch.nn.functional as F
 import torch.nn as nn
