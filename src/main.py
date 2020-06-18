@@ -12,9 +12,13 @@ from tqdm import tqdm
 from net import DenseNet
 from client import Client
 from dag import Node
+import reputation
 
 
 if __name__ == "__main__":
+    """TODO
+    # TODO: global test set
+    """
 
     """argparse"""
     parser = argparse.ArgumentParser()
@@ -23,7 +27,7 @@ if __name__ == "__main__":
     parser.add_argument('--nEpochs', type=int, default=300)
     parser.add_argument('--no-cuda', action='store_true')
     parser.add_argument('--path')
-    # parser.add_argument('--no-load', action='store_true')  # TODO
+    # parser.add_argument('--load', action='store_true')  # TODO
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--opt', type=str, default='sgd',
                         choices=('sgd', 'adam', 'rmsprop'))
@@ -120,29 +124,25 @@ if __name__ == "__main__":
             """References
             # TBA
             """
-            # select own node from DAG
-            # or just re-calculate it
+            if len(latest_nodes) < 2:  # 1
+                latest_nodes += latest_nodes
+
             tmp_client.set_dataset(trainset=None, testset=client.testset)
-            tmp_client.set_weights(client.get_weights())
-            my_acc = 100. - tmp_client.test(epoch, show=False, log=False)  # Acc
 
-            # Eval. other(s)' weights
-            # TODO: Eval. N weights
-            accs = []
-            for l in latest_nodes:
-                tmp_client.set_weights(l.get_weights())
-                accs.append(100. - tmp_client.test(epoch, show=False, log=False))  # Acc
+            bests, idx_bests, _ = reputation.by_accuracy(
+                proposals=latest_nodes, count=2, test_client=tmp_client,
+                epoch=epoch, show=False, log=False,
+                timing=False, optimal_stopping=False
+            )
 
-            # parent
-            best = sorted(accs)[0]
-            idx_best = accs.index(best)
-            parent = [client, latest_nodes[idx_best]]  # client, node
+            # parent  # TODO: parameterize
+            parent = [latest_nodes[idx_best] for idx_best in idx_bests]
 
-            # repus
-            selected_accs = [my_acc, best]
+            # repus  # TODO: parameterize
+            selected_accs = bests
             repus = [
-                selected_accs[0] / sum(selected_accs),  # my
-                selected_accs[1] / sum(selected_accs)]  # other's
+                selected_accs[0] / sum(selected_accs),
+                selected_accs[1] / sum(selected_accs)]
 
             """FL
             # own weights + the other's weights
