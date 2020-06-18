@@ -22,7 +22,7 @@ def by_accuracy(
         # Ref. this: https://horizon.kias.re.kr/6053/
         """
         n = len(proposals)
-        assert(n != 1)  # TODO: more than 1
+        assert(n != 1)  # TODO: case 1
         assert(n >= 3)  # TODO: remove restriction
 
         passing_number = int(n / math.e)

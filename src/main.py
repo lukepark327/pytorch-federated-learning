@@ -124,38 +124,49 @@ if __name__ == "__main__":
             """References
             # TBA
             """
-            if len(latest_nodes) < 2:  # 1
-                latest_nodes += latest_nodes
+            # My acc
+            my_acc = 100. - client.test(epoch, show=False, log=True)
 
+            # The others' acc
+            # TODO: parameterize
+            # TODO: ETA
             tmp_client.set_dataset(trainset=None, testset=client.testset)
+            if len(latest_nodes) < 2:  # 1
+                bests, idx_bests, _ = reputation.by_accuracy(
+                    proposals=latest_nodes, count=1, test_client=tmp_client,
+                    epoch=epoch, show=False, log=False,
+                    timing=False, optimal_stopping=False)
+            else:
+                bests, idx_bests, _ = reputation.by_accuracy(
+                    proposals=latest_nodes, count=2, test_client=tmp_client,
+                    epoch=epoch, show=False, log=False,
+                    timing=False, optimal_stopping=False)
 
-            bests, idx_bests, _ = reputation.by_accuracy(
-                proposals=latest_nodes, count=2, test_client=tmp_client,
-                epoch=epoch, show=False, log=False,
-                timing=False, optimal_stopping=False
-            )
+            best_nodes = [latest_nodes[idx_best] for idx_best in idx_bests]
 
-            # parent  # TODO: parameterize
-            parent = [latest_nodes[idx_best] for idx_best in idx_bests]
-
-            # repus  # TODO: parameterize
-            selected_accs = bests
-            repus = [
-                selected_accs[0] / sum(selected_accs),
-                selected_accs[1] / sum(selected_accs)]
+            # TODO: parameterize
+            if (len(bests) < 2) or (bests[0] < my_acc):
+                weightses = [client.get_weights(), best_nodes[0].get_weights()]
+                repus_sum = my_acc + bests[0]
+                repus = [my_acc / repus_sum, bests[0] / repus_sum]
+            elif bests[1] < my_acc:
+                weightses = [best_nodes[0].get_weights(), client.get_weights()]
+                repus_sum = bests[0] + my_acc
+                repus = [bests[0] / repus_sum, my_acc / repus_sum]
+            else:
+                weightses = [best_nodes[0].get_weights(), best_nodes[1].get_weights()]
+                repus = [bests[0] / sum(bests), bests[1] / sum(bests)]
 
             """FL
             # own weights + the other's weights
             """
-            client.set_average_weights(
-                [parent[0].get_weights(), parent[1].get_weights()],
-                repus)
+            client.set_average_weights(weightses, repus)
 
             # train
             client.train(epoch, show=False, log=True)
 
             # for logging
-            current_accs.append(100. - client.test(epoch, show=False, log=True))
+            current_accs.append(my_acc)
 
             # save weights
             client.save()
