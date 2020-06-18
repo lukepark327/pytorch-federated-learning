@@ -16,7 +16,7 @@ import random
 import collections
 
 
-from visual import heatmap
+from visualization import heatmap
 
 
 # Current implementation is nothing but `80:20` .

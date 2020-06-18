@@ -286,11 +286,11 @@ if __name__ == '__main__':
         net = net.cuda()
 
     if args.opt == 'sgd':
-        optimizer = optim.SGD(net.parameters(), lr=1e-1, momentum=0.9, weight_decay=1e-4)
+        optimizer = optim.SGD(net.parameters(), lr=1e-1, momentum=0.9)  # , weight_decay=1e-4)
     elif args.opt == 'adam':
-        optimizer = optim.Adam(net.parameters(), weight_decay=1e-4)
+        optimizer = optim.Adam(net.parameters())  # , weight_decay=1e-4)
     elif args.opt == 'rmsprop':
-        optimizer = optim.RMSprop(net.parameters(), weight_decay=1e-4)
+        optimizer = optim.RMSprop(net.parameters())  # , weight_decay=1e-4)
 
     # load
     if not args.no_load:
