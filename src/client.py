@@ -25,7 +25,7 @@ class Client:
             self._id = Client._id
             Client._id += 1
 
-        self.path = args.path or ('clients/' + str(self._id))
+        self.path = (args.path or 'clients') + '/' + str(self._id)
         os.makedirs(self.path, exist_ok=True)
 
         # logger

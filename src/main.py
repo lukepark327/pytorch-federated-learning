@@ -138,16 +138,16 @@ if __name__ == "__main__":
             tmp_client.set_dataset(trainset=None, testset=client.testset)
 
             """Acc."""
-            bests, idx_bests, _ = reputation.by_accuracy(
-                proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
-                epoch=epoch, show=False, log=False,
-                timing=False, optimal_stopping=False):
-
-            """Acc. with optimal stopping"""
             # bests, idx_bests, _ = reputation.by_accuracy(
             #     proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
             #     epoch=epoch, show=False, log=False,
-            #     timing=False, optimal_stopping=True):
+            #     timing=False, optimal_stopping=False)
+
+            """Acc. with optimal stopping"""
+            bests, idx_bests, _ = reputation.by_accuracy(
+                proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
+                epoch=epoch, show=False, log=False,
+                timing=False, optimal_stopping=True)
 
 
             """Probenius"""
