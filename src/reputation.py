@@ -195,6 +195,8 @@ def by_population():
 
 
 if __name__ == "__main__":
+    # python src/reputation.py --nNodes=40 --nPick=10
+
     import argparse
 
     import torchvision.datasets as dset
@@ -206,6 +208,8 @@ if __name__ == "__main__":
 
     """argparse"""
     parser = argparse.ArgumentParser()
+    parser.add_argument('--nNodes', type=int, default=100)
+    parser.add_argument('--nPick', type=int, default=5)
     parser.add_argument('--batchSz', type=int, default=128)
     parser.add_argument('--nEpochs', type=int, default=300)
     parser.add_argument('--no-cuda', action='store_true')
@@ -246,8 +250,8 @@ if __name__ == "__main__":
     testset = dset.CIFAR10(root='cifar', train=False, download=True, transform=testTransform)
 
     # Random split
-    splited_trainset = random_split(trainset, [int(len(trainset) / 10) for _ in range(10)])
-    splited_testset = random_split(testset, [int(len(testset) / 10) for _ in range(10)])
+    splited_trainset = random_split(trainset, [int(len(trainset) / args.nNodes) for _ in range(args.nNodes)])
+    splited_testset = random_split(testset, [int(len(testset) / args.nNodes) for _ in range(args.nNodes)])
 
     """FL
     # TBA
@@ -258,7 +262,7 @@ if __name__ == "__main__":
         #     sum([p.data.nelement() for p in net.parameters()])))
 
     clients = []
-    for i in range(10):
+    for i in range(args.nNodes):
         clients.append(Client(
             args=args,
             net=_dense_net(),
@@ -283,50 +287,50 @@ if __name__ == "__main__":
     # clients[0].train(epoch=1, show=False)
 
     if args.load:
-        for i in range(10):
+        for i in range(args.nNodes):
             clients[i].load()
     else:
-        for c in range(10):
+        for c in range(args.nNodes):
             for i in range(1, 2):
                 clients[c].train(epoch=i, show=True)
             clients[c].save()
 
     # by_accuracy
-    for c in range(10):
+    for c in range(args.nNodes):
         print("\nClient", c)
         tmp_client.set_dataset(trainset=None, testset=clients[c].testset)
 
         # by accuracy
         bests, idx_bests, elapsed = by_accuracy(
-            proposals=clients, count=5, test_client=tmp_client,
+            proposals=clients, count=args.nPick, test_client=tmp_client,
             epoch=1, show=False, log=False,
             timing=True, optimal_stopping=False)
         print("Acc\t:", idx_bests, elapsed)
 
         # by accuracy with optimal stopping
         bests, idx_bests, elapsed = by_accuracy(
-            proposals=clients, count=5, test_client=tmp_client,
+            proposals=clients, count=args.nPick, test_client=tmp_client,
             epoch=1, show=False, log=False,
             timing=True, optimal_stopping=True)
         print("Acc(OS)\t:", idx_bests, elapsed)
 
         # by Frobenius L2 norm
         bests, idx_bests, elapsed = by_Frobenius(
-            proposals=clients, count=5, base_client=clients[c], FN=False,
+            proposals=clients, count=args.nPick, base_client=clients[c], FN=False,
             return_acc=True, test_client=tmp_client, epoch=1, show=False, log=False,
             timing=True, optimal_stopping=False)
         print("F\t:", idx_bests, elapsed)
 
         # by Frobenius L2 norm with filter-wised normalization
         bests, idx_bests, elapsed = by_Frobenius(
-            proposals=clients, count=5, base_client=clients[c], FN=True,
+            proposals=clients, count=args.nPick, base_client=clients[c], FN=True,
             return_acc=True, test_client=tmp_client, epoch=1, show=False, log=False,
             timing=True, optimal_stopping=False)
         print("F(N)\t:", idx_bests, elapsed)
 
         # by Frobenius L2 norm with filter-wised normalization and optimal stopping
         bests, idx_bests, elapsed = by_Frobenius(
-            proposals=clients, count=5, base_client=clients[c], FN=True,
+            proposals=clients, count=args.nPick, base_client=clients[c], FN=True,
             return_acc=True, test_client=tmp_client, epoch=1, show=False, log=False,
             timing=True, optimal_stopping=True)
         print("F(N&OS)\t:", idx_bests, elapsed)
