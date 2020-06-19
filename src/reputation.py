@@ -77,6 +77,7 @@ def filterwise_normalization(weights: dict):
     res = dict()
     for name, value in weights.items():
         d = Frobenius({name: value})
+        d += 1e-10  # Ref. https://github.com/tomgoldstein/loss-landscape/blob/master/net_plotter.py#L111
         res[name] = value.div(d).mul(theta)
 
     return res
@@ -97,8 +98,8 @@ def Frobenius(weights: dict, base_weights: dict = None):
 
 
 def by_Frobenius(
-        proposals: list, count: int, base_client,
-        FN=False,  # TODO: acc=False, test_client=None,
+        proposals: list, count: int, base_client, FN=False,
+        return_acc=False, test_client=None, epoch=None, show=False, log=False,
         timing=False, optimal_stopping=False):
 
     if timing:
@@ -167,6 +168,15 @@ def by_Frobenius(
     # print(distances)
     bests = distances[:]
     bests, idx_bests = (list(t)[:count] for t in zip(*sorted(zip(bests, idx_bests), reverse=True)))
+    bests = [-1 * b for b in bests]
+
+    if return_acc and (test_client is not None) and (epoch is not None):
+        accs = []
+        for idx_best in idx_bests:
+            test_client.set_weights(proposals[idx_best].get_weights())
+            res = 100. - test_client.test(epoch, show=show, log=log)
+            accs.append(res)
+        bests = accs[:]
 
     # elapsed time
     if timing:
@@ -302,24 +312,21 @@ if __name__ == "__main__":
 
         # by Frobenius L2 norm
         bests, idx_bests, elapsed = by_Frobenius(
-            proposals=clients, count=5, base_client=clients[c],
-            FN=False,  # acc=False, test_client=None,
-            timing=True, optimal_stopping=False
-        )
+            proposals=clients, count=5, base_client=clients[c], FN=False,
+            return_acc=True, test_client=tmp_client, epoch=1, show=False, log=False,
+            timing=True, optimal_stopping=False)
         print("F\t:", idx_bests, elapsed)
 
         # by Frobenius L2 norm with filter-wised normalization
         bests, idx_bests, elapsed = by_Frobenius(
-            proposals=clients, count=5, base_client=clients[c],
-            FN=True,  # acc=False, test_client=None,
-            timing=True, optimal_stopping=False
-        )
+            proposals=clients, count=5, base_client=clients[c], FN=True,
+            return_acc=True, test_client=tmp_client, epoch=1, show=False, log=False,
+            timing=True, optimal_stopping=False)
         print("F(N)\t:", idx_bests, elapsed)
 
         # by Frobenius L2 norm with filter-wised normalization and optimal stopping
         bests, idx_bests, elapsed = by_Frobenius(
-            proposals=clients, count=5, base_client=clients[c],
-            FN=True,  # acc=False, test_client=None,
-            timing=True, optimal_stopping=True
-        )
+            proposals=clients, count=5, base_client=clients[c], FN=True,
+            return_acc=True, test_client=tmp_client, epoch=1, show=False, log=False,
+            timing=True, optimal_stopping=True)
         print("F(N&OS)\t:", idx_bests, elapsed)

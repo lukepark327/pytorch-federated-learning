@@ -191,6 +191,8 @@ class Client:
                 epoch, test_loss, err))
             self.testF.flush()
 
+        self.acc = 100. - err.item()
+
         return err.item()
 
     def adjust_opt(self, epoch):

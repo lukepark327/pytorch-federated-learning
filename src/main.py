@@ -125,7 +125,10 @@ if __name__ == "__main__":
             # TBA
             """
             # My acc
-            my_acc = 100. - client.test(epoch, show=False, log=True)
+            if client.acc is None:
+                my_acc = 100. - client.test(epoch, show=False, log=False)
+            else:
+                my_acc = client.acc
 
             # The others' acc
             # TODO: parameterize
@@ -133,19 +136,36 @@ if __name__ == "__main__":
             tmp_client.set_dataset(trainset=None, testset=client.testset)
             if len(latest_nodes) < 2:  # 1
                 bests, idx_bests, _ = reputation.by_Frobenius(
-                    proposals=latest_nodes, count=1, base_client=client,
-                    FN=True,
+                    proposals=latest_nodes, count=1, base_client=client, FN=True,
+                    return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
                     timing=False, optimal_stopping=False)
             else:
                 bests, idx_bests, _ = reputation.by_Frobenius(
-                    proposals=latest_nodes, count=2, base_client=client,
-                    FN=True,
+                    proposals=latest_nodes, count=2, base_client=client, FN=True,
+                    return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
                     timing=False, optimal_stopping=False)
 
             best_nodes = [latest_nodes[idx_best] for idx_best in idx_bests]
 
+            # check self-contain
+            self_contain_flag = False
+            # TODO: Use DAG to check
+            if len(bests) != 1:
+                target = reputation.Frobenius(client.get_weights())
+                if target == reputation.Frobenius(best_nodes[0].get_weights()):
+                    self_contain_flag = True
+                elif target == reputation.Frobenius(best_nodes[1].get_weights()):
+                    self_contain_flag = True
+
             # TODO: parameterize
-            if (len(bests) < 2) or (bests[0] < my_acc):
+            if len(bests) < 2:
+                weightses = [client.get_weights(), best_nodes[0].get_weights()]
+                repus_sum = my_acc + bests[0]
+                repus = [my_acc / repus_sum, bests[0] / repus_sum]
+            elif self_contain_flag:
+                weightses = [best_nodes[0].get_weights(), best_nodes[1].get_weights()]
+                repus = [bests[0] / sum(bests), bests[1] / sum(bests)]
+            elif bests[0] < my_acc:
                 weightses = [client.get_weights(), best_nodes[0].get_weights()]
                 repus_sum = my_acc + bests[0]
                 repus = [my_acc / repus_sum, bests[0] / repus_sum]
@@ -166,7 +186,8 @@ if __name__ == "__main__":
             client.train(epoch, show=False, log=True)
 
             # for logging
-            current_accs.append(my_acc)
+            after_avg_acc = 100. - client.test(epoch, show=False, log=True)
+            current_accs.append(after_avg_acc)
 
             # save weights
             client.save()
