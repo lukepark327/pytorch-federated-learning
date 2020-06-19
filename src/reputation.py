@@ -195,7 +195,7 @@ def by_population():
 
 
 if __name__ == "__main__":
-    # python src/reputation.py --nNodes=40 --nPick=10
+    # python src/reputation.py --nNodes=40 --nPick=10 --nEpochs=10 --load
 
     import argparse
 
@@ -291,7 +291,7 @@ if __name__ == "__main__":
             clients[i].load()
     else:
         for c in range(args.nNodes):
-            for i in range(1, 2):
+            for i in range(1, args.nEpochs + 1):
                 clients[c].train(epoch=i, show=True)
             clients[c].save()
 

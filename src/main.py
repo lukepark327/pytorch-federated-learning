@@ -74,15 +74,6 @@ if __name__ == "__main__":
         # print('>>> Number of params: {}'.format(
         #     sum([p.data.nelement() for p in net.parameters()])))
 
-    clients = []
-    for i in range(args.nNodes):
-        clients.append(Client(
-            args=args,
-            net=_dense_net(),
-            trainset=splited_trainset[i],
-            testset=splited_testset[i],
-            log=True))
-
     tmp_client = Client(  # for eval. the others' net / et al.
         args=args,
         net=_dense_net(),
@@ -90,6 +81,17 @@ if __name__ == "__main__":
         testset=None,
         log=False,
         _id=-1)
+
+    clients = []
+    for i in range(args.nNodes):
+        client = Client(
+            args=args,
+            net=_dense_net(),
+            trainset=splited_trainset[i],
+            testset=splited_testset[i],
+            log=True)
+        client.set_weights(tmp_client.get_weights())  # same init. weights
+        clients.append(client)
 
     """Set DAG
     # TODO: DAG connection
@@ -134,16 +136,25 @@ if __name__ == "__main__":
             # TODO: parameterize
             # TODO: ETA
             tmp_client.set_dataset(trainset=None, testset=client.testset)
-            if len(latest_nodes) < 2:  # 1
-                bests, idx_bests, _ = reputation.by_Frobenius(
-                    proposals=latest_nodes, count=1, base_client=client, FN=True,
-                    return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
-                    timing=False, optimal_stopping=False)
-            else:
-                bests, idx_bests, _ = reputation.by_Frobenius(
-                    proposals=latest_nodes, count=2, base_client=client, FN=True,
-                    return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
-                    timing=False, optimal_stopping=False)
+
+            """Acc."""
+            bests, idx_bests, _ = reputation.by_accuracy(
+                proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
+                epoch=epoch, show=False, log=False,
+                timing=False, optimal_stopping=False):
+
+            """Acc. with optimal stopping"""
+            # bests, idx_bests, _ = reputation.by_accuracy(
+            #     proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
+            #     epoch=epoch, show=False, log=False,
+            #     timing=False, optimal_stopping=True):
+
+
+            """Probenius"""
+            # bests, idx_bests, _ = reputation.by_Frobenius(
+            #     proposals=latest_nodes, count=min(len(latest_nodes), 2), base_client=client, FN=True,
+            #     return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
+            #     timing=False, optimal_stopping=False)
 
             best_nodes = [latest_nodes[idx_best] for idx_best in idx_bests]
 
