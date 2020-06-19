@@ -1,7 +1,11 @@
 import time
 import math
 
-from tqdm import tqdm
+# from tqdm import tqdm
+
+
+def by_random():
+    pass
 
 
 def by_accuracy(
@@ -9,54 +13,46 @@ def by_accuracy(
         epoch, show=False, log=False,
         timing=False, optimal_stopping=False):
 
-    assert(len(proposals) >= count)
+    n = len(proposals)
+    assert(n >= count)
 
     bests, idx_bests, elapsed = [], [], None
+    accs = []
 
     if timing:
         start = time.time()
 
-    if optimal_stopping:
+    if optimal_stopping and (n >= 3):
         """optimal stopping mode
         # TODO: not a best, but t% satisfaction (10, 20, ...)
         # Ref. this: https://horizon.kias.re.kr/6053/
         """
-        n = len(proposals)
-        assert(n != 1)  # TODO: case 1
-        assert(n >= 3)  # TODO: remove restriction
-
         passing_number = int(n / math.e)
         passings, watches = [], []
-        cutline, idx_cutline = 0., 0
+        cutline = 0.
 
         for i, proposal in enumerate(proposals):  # enumerate(tqdm(proposals)):
-            if i < passing_number:  # passing
-                test_client.set_weights(proposal.get_weights())
-                res = 100. - test_client.test(epoch, show=show, log=log)
-                if cutline < res:
-                    cutline, idx_cutline = res, i
-            else:  # wathing
-                test_client.set_weights(proposal.get_weights())
-                res = 100. - test_client.test(epoch, show=show, log=log)
-                if cutline < res:
-                    cutline, idx_cutline = res, i
+            test_client.set_weights(proposal.get_weights())
+            res = 100. - test_client.test(epoch, show=show, log=log)
+            accs.append(res)
+            idx_bests.append(i)
+            if cutline < res:
+                cutline = res
+                if i >= passing_number:
                     break
-
-        bests, idx_bests = [cutline], [idx_cutline]
     else:
         """normal mode
         # TBA
         """
-        accs = []
-        for proposal in proposals:  # tqdm(proposals):
+        for i, proposal in enumerate(proposals):  # tqdm(proposals):
             test_client.set_weights(proposal.get_weights())
             accs.append(
                 100. - test_client.test(epoch, show=show, log=log))
+            idx_bests.append(i)
 
-        bests = accs[:]
-        idx_bests = [i for i in range(len(accs))]
-
-        bests, idx_bests = (list(t)[:count] for t in zip(*sorted(zip(bests, idx_bests), reverse=True)))
+    # print(accs)
+    bests = accs[:]
+    bests, idx_bests = (list(t)[:count] for t in zip(*sorted(zip(bests, idx_bests), reverse=True)))
 
     # elapsed time
     if timing:
@@ -67,7 +63,8 @@ def by_accuracy(
 
 
 def by_Frobenius(
-        proposals: list, count: int, net,
+        proposals: list, count: int, test_client,
+        epoch, show=False, log=False,
         timing=False, optimal_stopping=False):
 
     pass
@@ -181,7 +178,7 @@ if __name__ == "__main__":
 
     tmp_client.set_dataset(trainset=None, testset=clients[0].testset)
     bests, idx_bests, elapsed = by_accuracy(
-        proposals=clients, count=1, test_client=tmp_client,
+        proposals=clients, count=2, test_client=tmp_client,
         epoch=1, show=False, log=False,
         timing=True, optimal_stopping=True
     )
