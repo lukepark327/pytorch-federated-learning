@@ -132,14 +132,14 @@ if __name__ == "__main__":
             # TODO: ETA
             tmp_client.set_dataset(trainset=None, testset=client.testset)
             if len(latest_nodes) < 2:  # 1
-                bests, idx_bests, _ = reputation.by_accuracy(
-                    proposals=latest_nodes, count=1, test_client=tmp_client,
-                    epoch=epoch, show=False, log=False,
+                bests, idx_bests, _ = reputation.by_Frobenius(
+                    proposals=latest_nodes, count=1, base_client=client,
+                    FN=True,
                     timing=False, optimal_stopping=False)
             else:
-                bests, idx_bests, _ = reputation.by_accuracy(
-                    proposals=latest_nodes, count=2, test_client=tmp_client,
-                    epoch=epoch, show=False, log=False,
+                bests, idx_bests, _ = reputation.by_Frobenius(
+                    proposals=latest_nodes, count=2, base_client=client,
+                    FN=True,
                     timing=False, optimal_stopping=False)
 
             best_nodes = [latest_nodes[idx_best] for idx_best in idx_bests]

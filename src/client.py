@@ -78,6 +78,11 @@ class Client:
         elif self.opt == 'rmsprop':
             self.optimizer = optim.RMSprop(net.parameters())  # , weight_decay=1e-4)
 
+        """Metadata
+        # TODO: save latest acc. to reduce computation
+        """
+        self.acc = None
+
     """ML
     # TBA
     """

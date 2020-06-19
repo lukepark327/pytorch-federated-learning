@@ -1,11 +1,18 @@
 import time
 import math
+import random
 
 # from tqdm import tqdm
+
+import torch
 
 
 def by_random():
     pass
+
+
+def suffle(A):
+    return (list(t) for t in zip(*(random.sample([i for i in (enumerate(A))], len(A)))))
 
 
 def by_accuracy(
@@ -13,32 +20,34 @@ def by_accuracy(
         epoch, show=False, log=False,
         timing=False, optimal_stopping=False):
 
+    if timing:
+        start = time.time()
+
     n = len(proposals)
     assert(n >= count)
 
     bests, idx_bests, elapsed = [], [], None
     accs = []
 
-    if timing:
-        start = time.time()
-
     if optimal_stopping and (n >= 3):
         """optimal stopping mode
+        # TODO: Randomize input list (proposals)
         # TODO: not a best, but t% satisfaction (10, 20, ...)
         # Ref. this: https://horizon.kias.re.kr/6053/
         """
         passing_number = int(n / math.e)
-        passings, watches = [], []
         cutline = 0.
 
-        for i, proposal in enumerate(proposals):  # enumerate(tqdm(proposals)):
+        idx_suffled, suffled = suffle(proposals)
+
+        for i, proposal in enumerate(suffled):
             test_client.set_weights(proposal.get_weights())
             res = 100. - test_client.test(epoch, show=show, log=log)
             accs.append(res)
-            idx_bests.append(i)
+            idx_bests.append(idx_suffled[i])
             if cutline < res:
                 cutline = res
-                if i >= passing_number:
+                if (i >= passing_number) and (i + 1 >= count):
                     break
     else:
         """normal mode
@@ -46,8 +55,8 @@ def by_accuracy(
         """
         for i, proposal in enumerate(proposals):  # tqdm(proposals):
             test_client.set_weights(proposal.get_weights())
-            accs.append(
-                100. - test_client.test(epoch, show=show, log=log))
+            res = 100. - test_client.test(epoch, show=show, log=log)
+            accs.append(res)
             idx_bests.append(i)
 
     # print(accs)
@@ -62,12 +71,109 @@ def by_accuracy(
     return bests, idx_bests, elapsed
 
 
+def filterwise_normalization(weights: dict):
+    theta = Frobenius(weights)
+
+    res = dict()
+    for name, value in weights.items():
+        d = Frobenius({name: value})
+        res[name] = value.div(d).mul(theta)
+
+    return res
+
+
+def Frobenius(weights: dict, base_weights: dict = None):
+    total = 0.
+    for name, value in weights.items():
+        if base_weights is not None:
+            elem = value.sub(base_weights[name])
+        else:
+            elem = value.clone().detach()
+
+        elem.mul_(elem)
+        total += torch.sum(elem).item()
+
+    return math.sqrt(total)
+
+
 def by_Frobenius(
-        proposals: list, count: int, test_client,
-        epoch, show=False, log=False,
+        proposals: list, count: int, base_client,
+        FN=False,  # TODO: acc=False, test_client=None,
         timing=False, optimal_stopping=False):
 
-    pass
+    if timing:
+        start = time.time()
+
+    n = len(proposals)
+    assert(n >= count)
+
+    bests, idx_bests, elapsed = [], [], None
+    distances = []
+
+    if optimal_stopping and (n >= 3):
+        """optimal stopping mode
+        # TODO: Her own weights' Frobenius Norm is 0
+        # so they are always best.
+        """
+        passing_number = int(n / math.e)
+        cutline = 0.
+
+        idx_suffled, suffled = suffle(proposals)
+        cached = None
+
+        for i, proposal in enumerate(suffled):  # enumerate(tqdm(proposals)):
+            if FN:
+                if cached is None:
+                    cached = filterwise_normalization(base_client.get_weights())
+
+                res = -1 * Frobenius(
+                    filterwise_normalization(proposal.get_weights()),
+                    base_weights=cached)
+            else:
+                res = -1 * Frobenius(
+                    proposal.get_weights(), base_weights=base_client.get_weights())
+
+            if i == 0:
+                cutline = res
+
+            distances.append(res)
+            idx_bests.append(idx_suffled[i])
+
+            if cutline < res:
+                cutline = res
+                if i >= passing_number and (i + 1 >= count):
+                    break
+    else:
+        """normal mode
+        # TBA
+        """
+        cached = None
+
+        for i, proposal in enumerate(proposals):
+            if FN:
+                if cached is None:
+                    cached = filterwise_normalization(base_client.get_weights())
+
+                res = -1 * Frobenius(
+                    filterwise_normalization(proposal.get_weights()),
+                    base_weights=cached)
+            else:
+                res = -1 * Frobenius(
+                    proposal.get_weights(), base_weights=base_client.get_weights())
+
+            distances.append(res)
+            idx_bests.append(i)
+
+    # print(distances)
+    bests = distances[:]
+    bests, idx_bests = (list(t)[:count] for t in zip(*sorted(zip(bests, idx_bests), reverse=True)))
+
+    # elapsed time
+    if timing:
+        elapsed = time.time() - start
+        # print(elapsed)
+
+    return bests, idx_bests, elapsed
 
 
 def by_GNN():
@@ -81,7 +187,6 @@ def by_population():
 if __name__ == "__main__":
     import argparse
 
-    import torch
     import torchvision.datasets as dset
     import torchvision.transforms as transforms
     from torch.utils.data import random_split
@@ -176,11 +281,45 @@ if __name__ == "__main__":
                 clients[c].train(epoch=i, show=True)
             clients[c].save()
 
-    tmp_client.set_dataset(trainset=None, testset=clients[0].testset)
-    bests, idx_bests, elapsed = by_accuracy(
-        proposals=clients, count=2, test_client=tmp_client,
-        epoch=1, show=False, log=False,
-        timing=True, optimal_stopping=True
-    )
+    # by_accuracy
+    for c in range(10):
+        print("\nClient", c)
+        tmp_client.set_dataset(trainset=None, testset=clients[c].testset)
 
-    print(bests, idx_bests, elapsed)
+        # by accuracy
+        bests, idx_bests, elapsed = by_accuracy(
+            proposals=clients, count=5, test_client=tmp_client,
+            epoch=1, show=False, log=False,
+            timing=True, optimal_stopping=False)
+        print("Acc\t:", idx_bests, elapsed)
+
+        # by accuracy with optimal stopping
+        bests, idx_bests, elapsed = by_accuracy(
+            proposals=clients, count=5, test_client=tmp_client,
+            epoch=1, show=False, log=False,
+            timing=True, optimal_stopping=True)
+        print("Acc(OS)\t:", idx_bests, elapsed)
+
+        # by Frobenius L2 norm
+        bests, idx_bests, elapsed = by_Frobenius(
+            proposals=clients, count=5, base_client=clients[c],
+            FN=False,  # acc=False, test_client=None,
+            timing=True, optimal_stopping=False
+        )
+        print("F\t:", idx_bests, elapsed)
+
+        # by Frobenius L2 norm with filter-wised normalization
+        bests, idx_bests, elapsed = by_Frobenius(
+            proposals=clients, count=5, base_client=clients[c],
+            FN=True,  # acc=False, test_client=None,
+            timing=True, optimal_stopping=False
+        )
+        print("F(N)\t:", idx_bests, elapsed)
+
+        # by Frobenius L2 norm with filter-wised normalization and optimal stopping
+        bests, idx_bests, elapsed = by_Frobenius(
+            proposals=clients, count=5, base_client=clients[c],
+            FN=True,  # acc=False, test_client=None,
+            timing=True, optimal_stopping=True
+        )
+        print("F(N&OS)\t:", idx_bests, elapsed)
