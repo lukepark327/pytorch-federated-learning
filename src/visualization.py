@@ -1,7 +1,6 @@
 """Ref
 # https://ipython.org/ipython-doc/stable/parallel/dag_dependencies.html
 # https://gist.github.com/apaszke/01aae7a0494c55af6242f06fad1f8b70
-# https://github.com/bamos/densenet.pytorch/blob/master/plot.py
 """
 
 
