@@ -212,7 +212,7 @@ if __name__ == "__main__":
                 # own weights + the other's weights
                 """
                 weightses = [e.get_weights() for e in elected_nodes]
-                repus_sum = sum(repus)
+                repus_sum = sum(elected_repus)
                 repus = [e / repus_sum for e in elected_repus]
 
                 client.set_average_weights(weightses, repus)
