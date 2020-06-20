@@ -159,22 +159,22 @@ if __name__ == "__main__":
                 # TODO: ETA
                 tmp_client.set_dataset(trainset=None, testset=client.testset)
 
-                if choicse == 'acc':
+                if args.repute == 'acc':
                     bests, idx_bests, _ = reputation.by_accuracy(
                         proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
                         epoch=epoch, show=False, log=False,
                         timing=False, optimal_stopping=args.op_stop)
-                elif choicse == 'Frobenius':
+                elif args.repute == 'Frobenius':
                     bests, idx_bests, _ = reputation.by_Frobenius(
                         proposals=latest_nodes, count=min(len(latest_nodes), 2), base_client=client, FN=args.filter,
                         return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
                         timing=False, optimal_stopping=args.op_stop)
-                elif choicse == 'random':
+                elif args.repute == 'random':
                     bests, idx_bests, _ = reputation.by_random(
                         proposals=latest_nodes, count=min(len(latest_nodes), 2),
                         return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
                         timing=False)
-                elif choicse == 'GNN':
+                elif args.repute == 'GNN':
                     pass  # TODO
                 else:
                     raise()  # err
