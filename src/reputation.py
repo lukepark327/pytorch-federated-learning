@@ -7,8 +7,34 @@ import random
 import torch
 
 
-def by_random():
-    pass
+def by_random(
+        proposals: list, count: int,
+        return_acc=False, test_client=None, epoch=None, show=False, log=False,
+        timing=False):
+
+    if timing:
+        start = time.time()
+
+    n = len(proposals)
+    assert(n >= count)
+
+    elapsed = None
+    accs = []
+
+    idxes = random.sample(range(n), count)
+
+    if return_acc and (test_client is not None) and (epoch is not None):
+        for idx in idxes:
+            test_client.set_weights(proposals[idx].get_weights())
+            res = 100. - test_client.test(epoch, show=show, log=log)
+            accs.append(res)
+
+    # elapsed time
+    if timing:
+        elapsed = time.time() - start
+        # print(elapsed)
+
+    return accs, idxes, elapsed
 
 
 def suffle(A):
@@ -298,8 +324,17 @@ if __name__ == "__main__":
     # by_accuracy
     for c in range(args.nNodes):
         print("\nClient", c)
+
         tmp_client.set_dataset(trainset=None, testset=clients[c].testset)
 
+        bests, idx_bests, elapsed = by_random(
+            proposals=clients, count=args.nPick,
+            return_acc=True, test_client=tmp_client, epoch=1, show=False, log=False,
+            timing=True)
+        print("Acc\t:", idx_bests, elapsed)
+        print(bests)
+
+        """
         # by accuracy
         bests, idx_bests, elapsed = by_accuracy(
             proposals=clients, count=args.nPick, test_client=tmp_client,
@@ -334,3 +369,4 @@ if __name__ == "__main__":
             return_acc=True, test_client=tmp_client, epoch=1, show=False, log=False,
             timing=True, optimal_stopping=True)
         print("F(N&OS)\t:", idx_bests, elapsed)
+        """

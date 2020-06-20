@@ -137,6 +137,12 @@ if __name__ == "__main__":
             # TODO: ETA
             tmp_client.set_dataset(trainset=None, testset=client.testset)
 
+            """Random"""
+            bests, idx_bests, _ = reputation.by_random(
+                proposals=latest_nodes, count=min(len(latest_nodes), 2),
+                return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
+                timing=False)
+
             """Acc."""
             # bests, idx_bests, _ = reputation.by_accuracy(
             #     proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
@@ -144,11 +150,10 @@ if __name__ == "__main__":
             #     timing=False, optimal_stopping=False)
 
             """Acc. with optimal stopping"""
-            bests, idx_bests, _ = reputation.by_accuracy(
-                proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
-                epoch=epoch, show=False, log=False,
-                timing=False, optimal_stopping=True)
-
+            # bests, idx_bests, _ = reputation.by_accuracy(
+            #     proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
+            #     epoch=epoch, show=False, log=False,
+            #     timing=False, optimal_stopping=True)
 
             """Probenius"""
             # bests, idx_bests, _ = reputation.by_Frobenius(
