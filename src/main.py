@@ -37,6 +37,8 @@ if __name__ == "__main__":
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
 
+    args.norm = args.nNodes - args.nByzs
+
     # set seed
     torch.manual_seed(args.seed)
     if args.cuda:
@@ -122,8 +124,11 @@ if __name__ == "__main__":
         print(">>> Round %5d" % (epoch))
 
         # select activated clients
-        n_activated = random.randint(1, args.nNodes)
-        activateds = random.sample([t for t in range(args.nNodes)], n_activated)
+        # At least one honest node
+        n_activated_byz = random.randint(0, args.nByzs)  # in Byz.
+        n_activated_norm = random.randint(1, args.norm)  # in Norm.
+        activateds = random.sample([t for t in range(args.nByzs)], n_activated_byz)
+        activateds += random.sample([t + args.nByzs for t in range(args.norm)], n_activated_norm)
 
         current_nodes = []
         current_accs = []
@@ -131,82 +136,85 @@ if __name__ == "__main__":
         for a in tqdm(activateds):
             client = clients[a]
 
-            client.adjust_opt(epoch)
+            if a < args.nByzs:  # Byzantine node
+                pass  # skip averaging
+            else:  # Normal node
+                client.adjust_opt(epoch)
 
-            """References
-            # TBA
-            """
-            # My acc
-            if client.acc is None:
-                my_acc = 100. - client.test(epoch, show=False, log=False)
-            else:
-                my_acc = client.acc
+                """References
+                # TBA
+                """
+                # My acc
+                if client.acc is None:
+                    my_acc = 100. - client.test(epoch, show=False, log=False)
+                else:
+                    my_acc = client.acc
 
-            # The others' acc
-            # TODO: parameterize
-            # TODO: ETA
-            tmp_client.set_dataset(trainset=None, testset=client.testset)
+                # The others' acc
+                # TODO: parameterize
+                # TODO: ETA
+                tmp_client.set_dataset(trainset=None, testset=client.testset)
 
-            """Random"""
-            bests, idx_bests, _ = reputation.by_random(
-                proposals=latest_nodes, count=min(len(latest_nodes), 2),
-                return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
-                timing=False)
+                """Random"""
+                bests, idx_bests, _ = reputation.by_random(
+                    proposals=latest_nodes, count=min(len(latest_nodes), 2),
+                    return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
+                    timing=False)
 
-            """Acc."""
-            # bests, idx_bests, _ = reputation.by_accuracy(
-            #     proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
-            #     epoch=epoch, show=False, log=False,
-            #     timing=False, optimal_stopping=False)
+                """Acc."""
+                # bests, idx_bests, _ = reputation.by_accuracy(
+                #     proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
+                #     epoch=epoch, show=False, log=False,
+                #     timing=False, optimal_stopping=False)
 
-            """Acc. with optimal stopping"""
-            # bests, idx_bests, _ = reputation.by_accuracy(
-            #     proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
-            #     epoch=epoch, show=False, log=False,
-            #     timing=False, optimal_stopping=True)
+                """Acc. with optimal stopping"""
+                # bests, idx_bests, _ = reputation.by_accuracy(
+                #     proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
+                #     epoch=epoch, show=False, log=False,
+                #     timing=False, optimal_stopping=True)
 
-            """Probenius"""
-            # bests, idx_bests, _ = reputation.by_Frobenius(
-            #     proposals=latest_nodes, count=min(len(latest_nodes), 2), base_client=client, FN=True,
-            #     return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
-            #     timing=False, optimal_stopping=False)
+                """Probenius"""
+                # bests, idx_bests, _ = reputation.by_Frobenius(
+                #     proposals=latest_nodes, count=min(len(latest_nodes), 2), base_client=client, FN=True,
+                #     return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
+                #     timing=False, optimal_stopping=False)
 
-            best_nodes = [latest_nodes[idx_best] for idx_best in idx_bests]
+                best_nodes = [latest_nodes[idx_best] for idx_best in idx_bests]
 
-            # check self-contain
-            self_contain_flag = False
-            # TODO: Use DAG to check
-            if len(bests) != 1:
-                target = reputation.Frobenius(client.get_weights())
-                if target == reputation.Frobenius(best_nodes[0].get_weights()):
-                    self_contain_flag = True
-                elif target == reputation.Frobenius(best_nodes[1].get_weights()):
-                    self_contain_flag = True
+                # check self-contain
+                self_contain_flag = False
+                # TODO: Use DAG to check
+                if len(bests) != 1:
+                    target = reputation.Frobenius(client.get_weights())
+                    if target == reputation.Frobenius(best_nodes[0].get_weights()):
+                        self_contain_flag = True
+                    elif target == reputation.Frobenius(best_nodes[1].get_weights()):
+                        self_contain_flag = True
 
-            # TODO: parameterize
-            if len(bests) < 2:
-                weightses = [client.get_weights(), best_nodes[0].get_weights()]
-                repus_sum = my_acc + bests[0]
-                repus = [my_acc / repus_sum, bests[0] / repus_sum]
-            elif self_contain_flag:
-                weightses = [best_nodes[0].get_weights(), best_nodes[1].get_weights()]
-                repus = [bests[0] / sum(bests), bests[1] / sum(bests)]
-            elif bests[0] < my_acc:
-                weightses = [client.get_weights(), best_nodes[0].get_weights()]
-                repus_sum = my_acc + bests[0]
-                repus = [my_acc / repus_sum, bests[0] / repus_sum]
-            elif bests[1] < my_acc:
-                weightses = [best_nodes[0].get_weights(), client.get_weights()]
-                repus_sum = bests[0] + my_acc
-                repus = [bests[0] / repus_sum, my_acc / repus_sum]
-            else:
-                weightses = [best_nodes[0].get_weights(), best_nodes[1].get_weights()]
-                repus = [bests[0] / sum(bests), bests[1] / sum(bests)]
+                # TODO: parameterize
+                if len(bests) < 2:
+                    weightses = [client.get_weights(), best_nodes[0].get_weights()]
+                    repus_sum = my_acc + bests[0]
+                    repus = [my_acc / repus_sum, bests[0] / repus_sum]
+                elif self_contain_flag:
+                    weightses = [best_nodes[0].get_weights(), best_nodes[1].get_weights()]
+                    repus = [bests[0] / sum(bests), bests[1] / sum(bests)]
+                elif bests[0] < my_acc:
+                    weightses = [client.get_weights(), best_nodes[0].get_weights()]
+                    repus_sum = my_acc + bests[0]
+                    repus = [my_acc / repus_sum, bests[0] / repus_sum]
+                elif bests[1] < my_acc:
+                    weightses = [best_nodes[0].get_weights(), client.get_weights()]
+                    repus_sum = bests[0] + my_acc
+                    repus = [bests[0] / repus_sum, my_acc / repus_sum]
+                else:
+                    weightses = [best_nodes[0].get_weights(), best_nodes[1].get_weights()]
+                    repus = [bests[0] / sum(bests), bests[1] / sum(bests)]
 
-            """FL
-            # own weights + the other's weights
-            """
-            client.set_average_weights(weightses, repus)
+                """FL
+                # own weights + the other's weights
+                """
+                client.set_average_weights(weightses, repus)
 
             # train
             client.train(epoch, show=False, log=True)
