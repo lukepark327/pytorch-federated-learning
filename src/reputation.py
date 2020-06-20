@@ -222,7 +222,7 @@ def by_population():
 
 if __name__ == "__main__":
     # python src/reputation.py --nNodes=40 --nPick=10 --nEpochs=10 --load
-
+    # python src/reputation.py --nNodes=10 --nPick=2 --load
     import argparse
 
     import torchvision.datasets as dset
@@ -327,14 +327,6 @@ if __name__ == "__main__":
 
         tmp_client.set_dataset(trainset=None, testset=clients[c].testset)
 
-        bests, idx_bests, elapsed = by_random(
-            proposals=clients, count=args.nPick,
-            return_acc=True, test_client=tmp_client, epoch=1, show=False, log=False,
-            timing=True)
-        print("Acc\t:", idx_bests, elapsed)
-        print(bests)
-
-        """
         # by accuracy
         bests, idx_bests, elapsed = by_accuracy(
             proposals=clients, count=args.nPick, test_client=tmp_client,
@@ -369,4 +361,3 @@ if __name__ == "__main__":
             return_acc=True, test_client=tmp_client, epoch=1, show=False, log=False,
             timing=True, optimal_stopping=True)
         print("F(N&OS)\t:", idx_bests, elapsed)
-        """
