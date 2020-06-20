@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 from net import DenseNet
 from client import Client
+from byzantines import Byzantine_Random
 from dag import Node
 import reputation
 
@@ -23,6 +24,7 @@ if __name__ == "__main__":
     """argparse"""
     parser = argparse.ArgumentParser()
     parser.add_argument('--nNodes', type=int, default=100)
+    parser.add_argument('--nByzs', type=int, default=33)
     parser.add_argument('--batchSz', type=int, default=128)
     parser.add_argument('--nEpochs', type=int, default=300)
     parser.add_argument('--no-cuda', action='store_true')
@@ -84,12 +86,20 @@ if __name__ == "__main__":
 
     clients = []
     for i in range(args.nNodes):
-        client = Client(
-            args=args,
-            net=_dense_net(),
-            trainset=splited_trainset[i],
-            testset=splited_testset[i],
-            log=True)
+        if i < args.nByzs:  # Byzantine nodes
+            client = Byzantine_Random(
+                args=args,
+                net=_dense_net(),
+                trainset=splited_trainset[i],
+                testset=splited_testset[i],
+                log=True)
+        else:  # Honest nodes
+            client = Client(
+                args=args,
+                net=_dense_net(),
+                trainset=splited_trainset[i],
+                testset=splited_testset[i],
+                log=True)
         client.set_weights(tmp_client.get_weights())  # same init. weights
         clients.append(client)
 

@@ -1,3 +1,3 @@
 """
-# used for upper bound
+# for upper bound
 """
