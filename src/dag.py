@@ -10,7 +10,8 @@ class Node:
                  weights,
                  #  parent: list = [],
                  #  edges: list = [],
-                 _id=None):
+                 _id=None,
+                 creator=None):
 
         # id
         if _id != None:
@@ -24,6 +25,8 @@ class Node:
         self.weights = weights
         # self.parent = parent
         # self.edges = edges
+
+        self.creator = creator
 
     def get_id(self):
         return self._id

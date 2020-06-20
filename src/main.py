@@ -27,8 +27,12 @@ if __name__ == "__main__":
     parser.add_argument('--nByzs', type=int, default=33)
     parser.add_argument('--batchSz', type=int, default=128)
     parser.add_argument('--nEpochs', type=int, default=300)
-    parser.add_argument('--no-cuda', action='store_true')
+    parser.add_argument('--op-stop', action='store_true')
+    parser.add_argument('--filter', action='store_true')
+    parser.add_argument('--repute', type=str, default='acc',
+                        choices=('acc', 'Frobenius', 'random', 'GNN'))
     parser.add_argument('--path')
+    parser.add_argument('--no-cuda', action='store_true')
     # parser.add_argument('--load', action='store_true')  # TODO
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--opt', type=str, default='sgd',
@@ -127,9 +131,8 @@ if __name__ == "__main__":
         # At least one honest node
         n_activated_byz = random.randint(0, args.nByzs)  # in Byz.
         n_activated_norm = random.randint(1, args.norm)  # in Norm.
-        activated_byzs = random.sample([t for t in range(args.nByzs)], n_activated_byz)
-        activated_norm = random.sample([t + args.nByzs for t in range(args.norm)], n_activated_norm)
-        activateds = activated_byzs + activated_norm
+        activateds = random.sample([t for t in range(args.nByzs)], n_activated_byz)
+        activateds += random.sample([t + args.nByzs for t in range(args.norm)], n_activated_norm)
 
         current_nodes = []
         current_accs = []
@@ -156,70 +159,62 @@ if __name__ == "__main__":
                 # TODO: ETA
                 tmp_client.set_dataset(trainset=None, testset=client.testset)
 
-                """Random"""
-                bests, idx_bests, _ = reputation.by_random(
-                    proposals=latest_nodes, count=min(len(latest_nodes), 2),
-                    return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
-                    timing=False)
-
-                """Acc."""
-                # bests, idx_bests, _ = reputation.by_accuracy(
-                #     proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
-                #     epoch=epoch, show=False, log=False,
-                #     timing=False, optimal_stopping=False)
-
-                """Acc. with optimal stopping"""
-                # bests, idx_bests, _ = reputation.by_accuracy(
-                #     proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
-                #     epoch=epoch, show=False, log=False,
-                #     timing=False, optimal_stopping=True)
-
-                """Probenius"""
-                # bests, idx_bests, _ = reputation.by_Frobenius(
-                #     proposals=latest_nodes, count=min(len(latest_nodes), 2), base_client=client, FN=True,
-                #     return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
-                #     timing=False, optimal_stopping=False)
+                if choicse == 'acc':
+                    bests, idx_bests, _ = reputation.by_accuracy(
+                        proposals=latest_nodes, count=min(len(latest_nodes), 2), test_client=tmp_client,
+                        epoch=epoch, show=False, log=False,
+                        timing=False, optimal_stopping=args.op_stop)
+                elif choicse == 'Frobenius':
+                    bests, idx_bests, _ = reputation.by_Frobenius(
+                        proposals=latest_nodes, count=min(len(latest_nodes), 2), base_client=client, FN=args.filter,
+                        return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
+                        timing=False, optimal_stopping=args.op_stop)
+                elif choicse == 'random':
+                    bests, idx_bests, _ = reputation.by_random(
+                        proposals=latest_nodes, count=min(len(latest_nodes), 2),
+                        return_acc=True, test_client=tmp_client, epoch=epoch, show=False, log=False,
+                        timing=False)
+                elif choicse == 'GNN':
+                    pass  # TODO
+                else:
+                    raise()  # err
 
                 best_nodes = [latest_nodes[idx_best] for idx_best in idx_bests]
+                elected_nodes = []
+                elected_repus = []
 
-                # check self-contain
-                self_contain_flag = False
-                # TODO: Use DAG to check
-                if len(bests) != 1:
-                    target = reputation.Frobenius(client.get_weights())
-                    if target == reputation.Frobenius(best_nodes[0].get_weights()):
-                        self_contain_flag = True
-                    elif target == reputation.Frobenius(best_nodes[1].get_weights()):
-                        self_contain_flag = True
-
-                # Special case
-                # to prevent allowing byz's weights.
-                if self_contain_flag and (len(activated_norm) == 1):
-                    self_contain_flag = False
+                # check self contain
+                self_contain = (sum([b.creator == a for b in best_nodes]) != 0)
 
                 # TODO: parameterize
-                if len(bests) < 2:
-                    weightses = [client.get_weights(), best_nodes[0].get_weights()]
-                    repus_sum = my_acc + bests[0]
-                    repus = [my_acc / repus_sum, bests[0] / repus_sum]
-                elif self_contain_flag:
-                    weightses = [best_nodes[0].get_weights(), best_nodes[1].get_weights()]
-                    repus = [bests[0] / sum(bests), bests[1] / sum(bests)]
-                elif bests[0] < my_acc:
-                    weightses = [client.get_weights(), best_nodes[0].get_weights()]
-                    repus_sum = my_acc + bests[0]
-                    repus = [my_acc / repus_sum, bests[0] / repus_sum]
-                elif bests[1] < my_acc:
-                    weightses = [best_nodes[0].get_weights(), client.get_weights()]
-                    repus_sum = bests[0] + my_acc
-                    repus = [bests[0] / repus_sum, my_acc / repus_sum]
-                else:
-                    weightses = [best_nodes[0].get_weights(), best_nodes[1].get_weights()]
-                    repus = [bests[0] / sum(bests), bests[1] / sum(bests)]
+                if (len(bests) < 2):  # 1
+                    elected_nodes = [best_nodes[0], client]
+                    elected_repus = [bests[0], my_acc]
+                elif not self_contain:
+                    if bests[1] > my_acc:
+                        elected_nodes = [best_nodes[0], best_nodes[1]]
+                        elected_repus = [bests[0], bests[1]]
+                    else:
+                        elected_nodes = [best_nodes[0], client]
+                        elected_repus = [bests[0], my_acc]
+                else:  # self-contained
+                    # TODO: How to select the other honest node? (Mix)
+                    # Current implementation:
+                    # there exists the possibility of own + own (no change)
+                    if bests[1] > my_acc:
+                        elected_nodes = [best_nodes[0], best_nodes[1]]
+                        elected_repus = [bests[0], bests[1]]
+                    else:
+                        elected_nodes = [best_nodes[0], client]
+                        elected_repus = [bests[0], my_acc]
 
                 """FL
                 # own weights + the other's weights
                 """
+                weightses = [e.get_weights() for e in elected_nodes]
+                repus_sum = sum(repus)
+                repus = [e / repus_sum for e in elected_repus]
+
                 client.set_average_weights(weightses, repus)
 
             # train
@@ -237,7 +232,8 @@ if __name__ == "__main__":
             """
             # create node
             new_node = Node(
-                weights=client.get_weights())
+                weights=client.get_weights(),
+                creator=a)
             # nodes.append(new_node)
             current_nodes.append(new_node)
 
