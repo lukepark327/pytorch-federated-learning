@@ -127,8 +127,9 @@ if __name__ == "__main__":
         # At least one honest node
         n_activated_byz = random.randint(0, args.nByzs)  # in Byz.
         n_activated_norm = random.randint(1, args.norm)  # in Norm.
-        activateds = random.sample([t for t in range(args.nByzs)], n_activated_byz)
-        activateds += random.sample([t + args.nByzs for t in range(args.norm)], n_activated_norm)
+        activated_byzs = random.sample([t for t in range(args.nByzs)], n_activated_byz)
+        activated_norm = random.sample([t + args.nByzs for t in range(args.norm)], n_activated_norm)
+        activateds = activated_byzs + activated_norm
 
         current_nodes = []
         current_accs = []
@@ -190,6 +191,11 @@ if __name__ == "__main__":
                         self_contain_flag = True
                     elif target == reputation.Frobenius(best_nodes[1].get_weights()):
                         self_contain_flag = True
+
+                # Special case
+                # to prevent allowing byz's weights.
+                if self_contain_flag and (len(activated_norm) == 1):
+                    self_contain_flag = False
 
                 # TODO: parameterize
                 if len(bests) < 2:
