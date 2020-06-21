@@ -223,7 +223,10 @@ def by_population():
 if __name__ == "__main__":
     # python src/reputation.py --nNodes=40 --nPick=10 --nEpochs=10 --load
     # python src/reputation.py --nNodes=10 --nPick=2 --load
+<<<<<<< HEAD
 
+=======
+>>>>>>> f46a3012a0c342e7194827fa89add16d656d5577
     import argparse
 
     import torchvision.datasets as dset
