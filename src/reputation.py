@@ -222,6 +222,7 @@ def by_population():
 
 if __name__ == "__main__":
     # python src/reputation.py --nNodes=40 --nPick=10 --nEpochs=10 --load
+    # python src/reputation.py --nNodes=10 --nPick=2 --load
 
     import argparse
 
@@ -238,6 +239,7 @@ if __name__ == "__main__":
     parser.add_argument('--nPick', type=int, default=5)
     parser.add_argument('--batchSz', type=int, default=128)
     parser.add_argument('--nEpochs', type=int, default=300)
+    parser.add_argument('--nLoops', type=int, default=100)
     parser.add_argument('--no-cuda', action='store_true')
     parser.add_argument('--load', action='store_true')
     parser.add_argument('--path')
@@ -287,20 +289,6 @@ if __name__ == "__main__":
         # print('>>> Number of params: {}'.format(
         #     sum([p.data.nelement() for p in net.parameters()])))
 
-    clients = []
-    for i in range(args.nNodes):
-        clients.append(Client(
-            args=args,
-            net=_dense_net(),
-            trainset=splited_trainset[i],
-            testset=splited_testset[i],
-            log=True and (not args.load)))
-
-    # Test
-    # clients[0].set_weights(clients[0].get_weights())
-    clients[1].set_weights(clients[0].get_weights())
-    clients[2].set_weights(clients[0].get_weights())
-
     tmp_client = Client(  # for eval. the others' net / et al.
         args=args,
         net=_dense_net(),
@@ -309,8 +297,16 @@ if __name__ == "__main__":
         log=False,
         _id=-1)
 
-    # train
-    # clients[0].train(epoch=1, show=False)
+    clients = []
+    for i in range(args.nNodes):
+        client = Client(
+            args=args,
+            net=_dense_net(),
+            trainset=splited_trainset[i],
+            testset=splited_testset[i],
+            log=True and (not args.load))
+        client.set_weights(tmp_client.get_weights())
+        clients.append(client)
 
     if args.load:
         for i in range(args.nNodes):
@@ -321,52 +317,70 @@ if __name__ == "__main__":
                 clients[c].train(epoch=i, show=True)
             clients[c].save()
 
-    # by_accuracy
-    for c in range(args.nNodes):
-        print("\nClient", c)
+    eta = dict()
 
-        tmp_client.set_dataset(trainset=None, testset=clients[c].testset)
+    for r in range(1, args.nLoops + 1):
 
-        bests, idx_bests, elapsed = by_random(
-            proposals=clients, count=args.nPick,
-            return_acc=True, test_client=tmp_client, epoch=1, show=False, log=False,
-            timing=True)
-        print("Acc\t:", idx_bests, elapsed)
-        print(bests)
+        for c in range(args.nNodes):
+            print("\n")
+            print("Round", r, end='\t')
+            print("Client", c)
 
-        """
-        # by accuracy
-        bests, idx_bests, elapsed = by_accuracy(
-            proposals=clients, count=args.nPick, test_client=tmp_client,
-            epoch=1, show=False, log=False,
-            timing=True, optimal_stopping=False)
-        print("Acc\t:", idx_bests, elapsed)
+            tmp_client.set_dataset(trainset=None, testset=clients[c].testset)
 
-        # by accuracy with optimal stopping
-        bests, idx_bests, elapsed = by_accuracy(
-            proposals=clients, count=args.nPick, test_client=tmp_client,
-            epoch=1, show=False, log=False,
-            timing=True, optimal_stopping=True)
-        print("Acc(OS)\t:", idx_bests, elapsed)
+            # by accuracy
+            bests, idx_bests, elapsed = by_accuracy(
+                proposals=clients, count=args.nPick, test_client=tmp_client,
+                epoch=r, show=False, log=False,
+                timing=True, optimal_stopping=False)
+            print("Acc\t:", idx_bests, elapsed)
+            if 'acc' not in eta:
+                eta['acc'] = []
+            eta['acc'].append(elapsed)
 
-        # by Frobenius L2 norm
-        bests, idx_bests, elapsed = by_Frobenius(
-            proposals=clients, count=args.nPick, base_client=clients[c], FN=False,
-            return_acc=True, test_client=tmp_client, epoch=1, show=False, log=False,
-            timing=True, optimal_stopping=False)
-        print("F\t:", idx_bests, elapsed)
+            # by accuracy with optimal stopping
+            bests, idx_bests, elapsed = by_accuracy(
+                proposals=clients, count=args.nPick, test_client=tmp_client,
+                epoch=r, show=False, log=False,
+                timing=True, optimal_stopping=True)
+            print("Acc(OS)\t:", idx_bests, elapsed)
+            if 'acc_os' not in eta:
+                eta['acc_os'] = []
+            eta['acc_os'].append(elapsed)
 
-        # by Frobenius L2 norm with filter-wised normalization
-        bests, idx_bests, elapsed = by_Frobenius(
-            proposals=clients, count=args.nPick, base_client=clients[c], FN=True,
-            return_acc=True, test_client=tmp_client, epoch=1, show=False, log=False,
-            timing=True, optimal_stopping=False)
-        print("F(N)\t:", idx_bests, elapsed)
+            # by Frobenius L2 norm
+            bests, idx_bests, elapsed = by_Frobenius(
+                proposals=clients, count=args.nPick, base_client=clients[c], FN=False,
+                return_acc=True, test_client=tmp_client, epoch=r, show=False, log=False,
+                timing=True, optimal_stopping=False)
+            print("F\t:", idx_bests, elapsed)
+            if 'Frobenius' not in eta:
+                eta['Frobenius'] = []
+            eta['Frobenius'].append(elapsed)
 
-        # by Frobenius L2 norm with filter-wised normalization and optimal stopping
-        bests, idx_bests, elapsed = by_Frobenius(
-            proposals=clients, count=args.nPick, base_client=clients[c], FN=True,
-            return_acc=True, test_client=tmp_client, epoch=1, show=False, log=False,
-            timing=True, optimal_stopping=True)
-        print("F(N&OS)\t:", idx_bests, elapsed)
-        """
+            # by Frobenius L2 norm with filter-wised normalization
+            bests, idx_bests, elapsed = by_Frobenius(
+                proposals=clients, count=args.nPick, base_client=clients[c], FN=True,
+                return_acc=True, test_client=tmp_client, epoch=r, show=False, log=False,
+                timing=True, optimal_stopping=False)
+            print("F(N)\t:", idx_bests, elapsed)
+            if 'Frobenius_FN' not in eta:
+                eta['Frobenius_FN'] = []
+            eta['Frobenius_FN'].append(elapsed)
+
+            # by Frobenius L2 norm with filter-wised normalization and optimal stopping
+            bests, idx_bests, elapsed = by_Frobenius(
+                proposals=clients, count=args.nPick, base_client=clients[c], FN=True,
+                return_acc=True, test_client=tmp_client, epoch=r, show=False, log=False,
+                timing=True, optimal_stopping=True)
+            print("F(N&OS)\t:", idx_bests, elapsed)
+            if 'Frobenius_FN_os' not in eta:
+                eta['Frobenius_FN_os'] = []
+            eta['Frobenius_FN_os'].append(elapsed)
+
+    # Avg
+    for key, value in eta.items():
+        eta[key] = sum(value) / len(value)
+
+    from pprint import pprint
+    pprint(eta)
