@@ -35,7 +35,7 @@ if __name__ == '__main__':
     trainI, trainLoss, trainErr = np.split(trainData, [1, 2], axis=1)
     trainI, trainLoss, trainErr = [x.ravel() for x in
                                    (trainI, trainLoss, trainErr)]
-    
+
     try:
         trainI_, trainLoss_, trainErr_ = rolling(N, trainI, trainLoss, trainErr)
     except(ValueError):
