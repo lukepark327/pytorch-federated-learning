@@ -1,6 +1,9 @@
 import torch
 from torch.autograd import Variable
 
+import json
+import hashlib
+
 import math
 from numbers import Number
 
@@ -309,8 +312,15 @@ class Weights():
     # TBA
     """
 
-    def __hash__(self):
-        pass  # TODO: SHA256
+    def __str__(self):
+        res = dict()
+        for key, value in self.items():
+            res[key] = value.tolist()
+
+        return json.dumps(res)
+
+    def hash(self):
+        return hashlib.sha256(str(self).encode()).hexdigest()
 
     """copy
     # TBA
@@ -473,8 +483,12 @@ if __name__ == "__main__":
         bottleneck=True,
         nClasses=10)
     w1 = Weights(net1.named_parameters())
+    w2 = Weights(net1.named_parameters()) + 2
 
-    print(Frobenius(w1))
-    print(Frobenius(FilterNorm(w1)))
-    print(Frobenius(w1))
-    print(Frobenius(w1, base_weights=w1))
+    print(w1.hash())
+    print(w2.hash())
+
+    w1.copy_(w2)
+
+    print(w1.hash())
+    print(w2.hash())
