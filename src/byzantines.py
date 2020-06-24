@@ -7,6 +7,15 @@ import torch
 from client import Client
 
 
+class Byzantine_Omniscience(Client):
+    """
+    # make sum of vectors to zero
+    # Expected ?
+    # TBA
+    """
+    pass
+
+
 class Byzantine_Random(Client):
     def train(self,
               epoch, show=True, log=True):

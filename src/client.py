@@ -79,7 +79,7 @@ class Client:
             self.optimizer = optim.RMSprop(net.parameters())  # , weight_decay=1e-4)
 
         """Metadata
-        # TODO: save latest acc. to reduce computation
+        # (cache) saving latest acc. to reduce computation
         """
         self.acc = None
 
@@ -87,14 +87,20 @@ class Client:
     # TBA
     """
 
-    def save(self, path=None, name='latest.pth'):
+    def save(self, path=None, name='latest.pth', numbering=None):
         path = path or self.path
+        if numbering:
+            path = os.path.join(path, numbering)
+
         loca = os.path.join(path, name)
 
         torch.save(self.net, loca)
 
-    def load(self, path=None, name='latest.pth'):
+    def load(self, path=None, name='latest.pth', numbering=None):
         path = path or self.path
+        if numbering:
+            path = os.path.join(path, numbering)
+
         loca = os.path.join(path, name)
 
         if os.path.isfile(loca):
