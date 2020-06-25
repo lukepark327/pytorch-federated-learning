@@ -153,12 +153,6 @@ class Weights():
     def __mul__(self, other):
         return self.mul(other)
 
-    # TODO: x @ y
-    # def __matmul__(self, other):
-    #     # @: inner product
-    #     pass
-    # mm
-
     # x / (y: dict or Weights): inverse of Hadamard product
     # or
     # x / (y: Number): inverse of scalar multiplication
@@ -281,32 +275,32 @@ class Weights():
         return self.round()
 
     """cmp
-    # *_ : in-place version
+    # Using Frobenius L2 norm.
     """
 
+    # x < y
     def __lt__(self, other):
-        # < other
-        pass
+        return Frobenius(self) < Frobenius(other)
 
+    # x <= y
     def __le__(self, other):
-        # <= other
-        pass
+        return Frobenius(self) <= Frobenius(other)
 
+    # x > y
     def __gt__(self, other):
-        # > other
-        pass
+        return Frobenius(self) > Frobenius(other)
 
+    # x >= y
     def __ge__(self, other):
-        # >= other
-        pass
+        return Frobenius(self) >= Frobenius(other)
 
+    # x == y
     def __eq__(self, other):
-        # == other
-        pass
+        return Frobenius(self) == Frobenius(other)
 
+    # x != y
     def __ne__(self, other):
-        # != other
-        pass
+        return Frobenius(self) != Frobenius(other)
 
     """type
     # TBA
@@ -385,6 +379,9 @@ class Weights():
             res[key] = torch.empty_like(value)
         return res
 
+    def empty_(self):
+        self.params = self._empty()
+
     def empty(self):
         return Weights(self._empty())
 
@@ -447,7 +444,7 @@ def FilterNorm(weights):
 
     res = dict()
     for key, value in weights.items():
-        d = Frobenius({key: value})
+        d = Frobenius(Weights({key: value}))
         d += 1e-10  # Ref. https://github.com/tomgoldstein/loss-landscape/blob/master/net_plotter.py#L111
         res[key] = value.div(d).mul(theta)
 
@@ -459,16 +456,12 @@ def FilterNorm(weights):
 
 def Frobenius(weights, base_weights=None):
     # Frobenius Norm.
+    base_weights = base_weights or weights.zeros()
+    square = ((weights - base_weights) ** 2)
 
     total = 0.
-    for key, value in weights.items():
-        if base_weights is not None:
-            elem = value.sub(base_weights[key])
-        else:
-            elem = value.clone().detach()
-
-        elem.mul_(elem)
-        total += torch.sum(elem).item()
+    for key, value in square.items():
+        total += torch.sum(value).item()
 
     return math.sqrt(total)
 
@@ -485,10 +478,8 @@ if __name__ == "__main__":
     w1 = Weights(net1.named_parameters())
     w2 = Weights(net1.named_parameters()) + 2
 
-    print(w1.hash())
-    print(w2.hash())
-
-    w1.copy_(w2)
-
-    print(w1.hash())
-    print(w2.hash())
+    print(w2 <= w2)
+    print(Frobenius(w1))
+    print(Frobenius(FilterNorm(w1)))
+    print(Frobenius(w1, w2))
+    print(Frobenius(w1, w1))
