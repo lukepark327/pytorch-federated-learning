@@ -30,22 +30,22 @@ if __name__ == '__main__':
     except(IOError):
         exit()
 
-    N = 392 * 2  # Rolling loss over the past epoch.
+    # N = 392 * 2  # Rolling loss over the past epoch.
 
     trainI, trainLoss, trainErr = np.split(trainData, [1, 2], axis=1)
     trainI, trainLoss, trainErr = [x.ravel() for x in
                                    (trainI, trainLoss, trainErr)]
 
-    try:
-        trainI_, trainLoss_, trainErr_ = rolling(N, trainI, trainLoss, trainErr)
-    except(ValueError):
-        exit()
+    # try:
+    #     trainI_, trainLoss_, trainErr_ = rolling(N, trainI, trainLoss, trainErr)
+    # except(ValueError):
+    #     exit()
 
     testI, testLoss, testErr = np.split(testData, [1, 2], axis=1)
 
     fig, ax = plt.subplots(1, 1, figsize=(6, 5))
-    # plt.plot(trainI, trainLoss, label='Train')
-    plt.plot(trainI_, trainLoss_, label='Train')
+    plt.plot(trainI, trainLoss, label='Train')
+    # plt.plot(trainI_, trainLoss_, label='Train')
     plt.plot(testI, testLoss, label='Test')
     plt.xlabel('Epoch')
     plt.ylabel('Cross-Entropy Loss')
@@ -56,8 +56,8 @@ if __name__ == '__main__':
     print('Created {}'.format(loss_fname))
 
     fig, ax = plt.subplots(1, 1, figsize=(6, 5))
-    # plt.plot(trainI, trainErr, label='Train')
-    plt.plot(trainI_, trainErr_, label='Train')
+    plt.plot(trainI, trainErr, label='Train')
+    # plt.plot(trainI_, trainErr_, label='Train')
     plt.plot(testI, testErr, label='Test')
     plt.xlabel('Epoch')
     plt.ylabel('Error')
